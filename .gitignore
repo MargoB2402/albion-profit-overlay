@@ -1,0 +1,6 @@
+node_modules/
+dist/
+main.obf.js
+preload.obf.js
+.env
+*.7z

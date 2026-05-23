@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="32" height="32">
+  <path fill="#2b78c4" d="M125 150c-41.4 0-75 33.6-75 75v175h50V225c0-13.8 11.2-25 25-25h50v150h50V150H125z"/>
+  <path fill="#1a5a9c" d="M275 150v250h50V150h-50z"/>
+  <path fill="#66b333" d="M375 100v300h50V100h-50z"/>
+  <path fill="#7ac143" d="M50 350l125-100 75 50 150-150 50 50-200 200-75-50-125 100z"/>
+</svg>
