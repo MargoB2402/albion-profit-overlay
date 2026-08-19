@@ -302,15 +302,17 @@ async function handleAgentWsMessage(msg) {
     } else if (type === 'trade_buy' || type === 'trade_sell') {
         // Авто-запись покупок/продаж в бухгалтерию — строго по тумблеру в настройках,
         // это финансовые данные игрока и включается им самим, а не по умолчанию.
+        // Лог пишем ДО проверки тумблера — иначе при выключенном тумблере событие от
+        // агента тонет без единого следа, и непонятно, дошло оно вообще или нет.
+        syncLog('[agent-ws]', type, 'raw=', JSON.stringify(payload).slice(0, 200));
         const { autoLogTrade } = readConfig();
-        if (!autoLogTrade) return;
+        if (!autoLogTrade) { syncLog(`[agent-ws] ${type} skipped: autoLogTrade is off`); return; }
 
         const endpoint = type === 'trade_buy' ? '/api/ledger/sync/market-buy' : '/api/ledger/sync/market-sale';
         const body = type === 'trade_buy'
             ? { item_id: payload.item_id, price: payload.price, quantity: payload.quantity, city: payload.city, source_id: payload.source_id }
             : { item_id: payload.item_id, price: payload.price, quantity: payload.quantity, city: payload.city, source_id: payload.source_id, total_after_taxes: payload.total_after_taxes };
 
-        syncLog('[agent-ws]', type, 'raw=', JSON.stringify(payload).slice(0, 200));
         const res = await fetch(`${API_BASE}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },

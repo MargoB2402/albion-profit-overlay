@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useApi } from '../hooks/useApi';
 import { useI18n, LANG_OPTIONS, setLang } from '../hooks/useI18n';
 
 const S = {
@@ -34,8 +33,7 @@ function ToggleSwitch({ checked, onChange }) {
     );
 }
 
-export default function Settings({ onClose }) {
-    const { config, saveConfig, logout, isLoggedIn, isPro, isProPlus } = useApi();
+export default function Settings({ onClose, agentLocationKnown, config, saveConfig, logout, isLoggedIn, isPro, isProPlus }) {
     const { t, lang } = useI18n();
 
     const [wallet,  setWallet]  = useState(config.wallet       || '');
@@ -166,6 +164,12 @@ export default function Settings({ onClose }) {
                 </div>
                 <ToggleSwitch checked={autoLog} onChange={setAutoLog} />
             </div>
+
+            {autoLog && !agentLocationKnown && (
+                <div style={{ ...S.warning, marginBottom: '10px' }}>
+                    🧭 {t('autoLogNeedsZoneChange') || 'Смени зону (телепортируйся или зайди в город) один раз, чтобы агент определил локацию — без этого авто-запись мгновенных покупок не сработает.'}
+                </div>
+            )}
 
             <button style={S.btn} onClick={handleSave}>
                 {saved ? t('savedBtn') : t('saveBtn')}

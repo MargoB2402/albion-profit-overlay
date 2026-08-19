@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { ApiProvider } from './hooks/useApi';
 
 class ErrorBoundary extends React.Component {
     constructor(props) { super(props); this.state = { error: null }; }
@@ -24,6 +25,8 @@ class ErrorBoundary extends React.Component {
 // StrictMode убран — двойной mount ломает WebSocket
 ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
-        <App />
+        <ApiProvider>
+            <App />
+        </ApiProvider>
     </ErrorBoundary>
 );

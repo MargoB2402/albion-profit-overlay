@@ -1,5 +1,16 @@
 // Все запросы к API идут через Electron main process (IPC) — без CORS
-import { useState, useEffect, useCallback, useRef } from 'react';
+//
+// Раньше каждый компонент (Settings, CraftWidget, EnchantWidget, PriceWidget, ...) вызывал
+// useApi() независимо — у каждого была СВОЯ копия config/isPro/isProPlus, свой отдельный
+// IPC-запрос getConfig() и своя отдельная HTTP-проверка сессии. Это давало гонки: если
+// какой-то компонент монтировался (например, после сворачивания/разворачивания оверлея)
+// раньше, чем его собственный getConfig() успевал ответить, useState(config.wallet || '')
+// на первом рендере намертво фиксировал пустые значения — и они больше никогда не
+// обновлялись, даже когда config реально приходил. Один виджет мог показывать "PRO+
+// активен", а другой в это же время — "требуется PRO+", потому что у них буквально РАЗНОЕ
+// состояние. Теперь состояние одно на всё приложение (React Context), обновляется в одном
+// месте — все потребители всегда видят одно и то же actual state.
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getLang } from './useI18n.js';
 
 const API_BASE = 'https://promptly.sbs';
@@ -20,7 +31,7 @@ async function apiFetch(url, opts = {}) {
     return res.json();
 }
 
-export function useApi() {
+function useApiState() {
     const [config, setConfig]       = useState({ wallet: '', token: '', apiBase: API_BASE, autoLogTrade: false, filterMaxAge: 4, filterMinDaily: 7, filterMaxMargin: 100 });
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isPro, setIsPro]         = useState(false);
@@ -289,4 +300,19 @@ export function useApi() {
     }, [config]);
 
     return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
+}
+
+const ApiContext = createContext(null);
+
+export function ApiProvider({ children }) {
+    const value = useApiState();
+    return React.createElement(ApiContext.Provider, { value }, children);
+}
+
+export function useApi() {
+    const ctx = useContext(ApiContext);
+    if (!ctx) {
+        throw new Error('useApi() must be called inside <ApiProvider>');
+    }
+    return ctx;
 }

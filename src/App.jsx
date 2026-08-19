@@ -36,10 +36,13 @@ export default function App() {
         } catch { return true; }
     });
     const [agentConnected, setAgentConnected] = useState(false);
+    // Локация игрока (из пакетов агента, НЕ ocrCity) — нужна для авто-детекта мгновенной
+    // покупки. Узнаётся только при смене зоны, поэтому на свежем старте агента её нет.
+    const [agentLocationKnown, setAgentLocationKnown] = useState(false);
     const [minimized, setMinimized]       = useState(false);
     const dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
 
-    const { config, isLoggedIn } = useApi();
+    const { config, isLoggedIn, isPro, isProPlus, saveConfig, logout } = useApi();
     const { t } = useI18n();
 
     // Проверяем обновление при запуске (раз в сессию)
@@ -58,6 +61,9 @@ export default function App() {
         onEvent: (evt) => {
             if ((evt.type === 'trade_buy' || evt.type === 'trade_sell') && isLoggedIn && config.autoLogTrade) {
                 setPendingTrade(evt);
+            }
+            if (evt.type === 'location') {
+                setAgentLocationKnown(true);
             }
             // market_view НЕ переключает вкладку — агент только передаёт товарную позицию
         },
@@ -266,7 +272,10 @@ export default function App() {
             {/* ── Content ── */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 {settingsOpen ? (
-                    <Settings onClose={() => {
+                    <Settings
+                        config={config} isLoggedIn={isLoggedIn} isPro={isPro} isProPlus={isProPlus}
+                        saveConfig={saveConfig} logout={logout}
+                        agentLocationKnown={agentLocationKnown} onClose={() => {
                         localStorage.setItem('overlay-first-run', JSON.stringify({ configured: true }));
                         setSettingsOpen(false);
                     }} />
