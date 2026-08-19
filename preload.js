@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electron', {
     // Update check (для баннера)
     checkGithubUpdate: () => ipcRenderer.invoke('check-github-update'),
 
+    // Версия приложения (для отображения в настройках)
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
     // Debug mode (OCR screenshots)
     getDebugMode: ()               => ipcRenderer.invoke('get-debug-mode'),
     setDebugMode: (enable, pass)   => ipcRenderer.invoke('set-debug-mode', { enable, password: pass }),

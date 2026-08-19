@@ -53,6 +53,11 @@ export default function Settings({ onClose }) {
         window.electron?.getDebugMode?.().then(v => setDebugActive(!!v));
     }, []);
 
+    const [appVersion, setAppVersion] = useState('');
+    useEffect(() => {
+        window.electron?.getAppVersion?.().then(v => setAppVersion(v || ''));
+    }, []);
+
     // Filter settings
     const [maxAge,    setMaxAge]    = useState(config.filterMaxAge    ?? 4);
     const [minDaily,  setMinDaily]  = useState(config.filterMinDaily  ?? 7);
@@ -251,6 +256,12 @@ export default function Settings({ onClose }) {
                         }}>Включить</button>
                         <button style={{ ...S.ghost, flex: 1 }} onClick={() => { setDebugPrompt(false); setDebugPass(''); setDebugErr(''); }}>Отмена</button>
                     </div>
+                </div>
+            )}
+
+            {appVersion && (
+                <div style={{ textAlign: 'center', fontSize: '10px', color: '#334155', marginTop: '16px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                    Albion Profit Overlay v{appVersion}
                 </div>
             )}
         </div>

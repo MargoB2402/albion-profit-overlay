@@ -1010,6 +1010,8 @@ function writeConfig(data) {
     } catch (e) { console.error('[config] save error:', e.message); return false; }
 }
 
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 ipcMain.handle('get-config', () => {
     const saved = readConfig();
     return {
