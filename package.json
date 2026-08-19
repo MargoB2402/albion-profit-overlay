@@ -1,22 +1,24 @@
 {
   "name": "albion-profit-overlay",
-  "version": "1.4.0",
+  "version": "1.5.7",
   "description": "Albion Profit — Game Overlay",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently \"vite --port 3001\" \"cross-env NODE_ENV=development electron .\"",
-    "icons":     "node scripts/make-icons.mjs",
-    "build":     "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/make-icons.mjs && vite build && node scripts/obfuscate.mjs && electron-builder",
+    "icons": "node scripts/make-icons.mjs",
+    "build": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/make-icons.mjs && vite build && node scripts/obfuscate.mjs && electron-builder",
     "build:dir": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/make-icons.mjs && vite build && node scripts/obfuscate.mjs && electron-builder --dir",
-    "preview":   "vite preview",
-    "release":   "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/make-icons.mjs && vite build && node scripts/obfuscate.mjs && electron-builder --publish always"
+    "preview": "vite preview",
+    "release": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/make-icons.mjs && vite build && node scripts/obfuscate.mjs && electron-builder --publish always"
   },
   "build": {
     "appId": "sbs.promptly.overlay",
     "productName": "Albion Profit Overlay",
     "copyright": "Copyright © 2026 Albion Profit",
     "asar": true,
-    "asarUnpack": ["assets/agent.exe"],
+    "asarUnpack": [
+      "assets/agent.exe"
+    ],
     "afterPack": "scripts/post-build.mjs",
     "files": [
       "dist/**",
@@ -31,7 +33,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "requestedExecutionLevel": "asInvoker",
@@ -57,7 +61,8 @@
   "dependencies": {
     "cross-env": "^7.0.3",
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

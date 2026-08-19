@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
-import { useI18n } from '../hooks/useI18n';
+import { useI18n, getLang } from '../hooks/useI18n';
 
 const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(Math.round(n));
 
@@ -70,7 +70,11 @@ export default function TransportWidget({ city }) {
     const { fetchPrice, fetchTransportTop, config } = useApi();
     const { t } = useI18n();
 
-    const [item,    setItem]    = useState('');
+    const [item,        setItem]       = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSug,     setShowSug]    = useState(false);
+    const [selectedId,  setSelectedId] = useState('');
+    const sugTimer = useRef(null);
     const [from,    setFrom]    = useState(city !== 'unknown' ? city : 'Thetford');
     const [to,      setTo]      = useState('Caerleon');
     const [tax,     setTax]     = useState(10.5);
@@ -86,6 +90,28 @@ export default function TransportWidget({ city }) {
     React.useEffect(() => {
         if (city && city !== 'unknown') setFrom(city);
     }, [city]);
+
+    const handleItemInput = (q) => {
+        setItem(q); setSelectedId(''); setResult(null);
+        clearTimeout(sugTimer.current);
+        if (q.trim().length < 2) { setSuggestions([]); setShowSug(false); return; }
+        sugTimer.current = setTimeout(async () => {
+            try {
+                const base = config.apiBase || 'https://promptly.sbs';
+                const { wallet, token } = config;
+                if (!wallet || !token) return;
+                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=7&lang=${getLang()}`;
+                const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
+                const data = res?.data ?? res;
+                if (Array.isArray(data) && data.length) { setSuggestions(data); setShowSug(true); }
+                else { setSuggestions([]); setShowSug(false); }
+            } catch {}
+        }, 250);
+    };
+
+    const selectSuggestion = (s) => {
+        setItem(s.name); setSelectedId(s.id); setSuggestions([]); setShowSug(false);
+    };
 
     const calculate = async () => {
         if (!item.trim()) return;
@@ -166,10 +192,29 @@ export default function TransportWidget({ city }) {
             {mode === 'single' && (
                 <>
                     <label style={S.label}>{t('itemLabel')}</label>
-                    <input style={{ ...S.input, marginBottom: '0' }} value={item}
-                        onChange={e => setItem(e.target.value)}
-                        placeholder={t('searchPlaceholder')}
-                        onKeyDown={e => e.key === 'Enter' && calculate()} />
+                    <div style={{ position: 'relative' }}>
+                        <input style={{ ...S.input, marginBottom: '0' }} value={item}
+                            onChange={e => handleItemInput(e.target.value)}
+                            placeholder={t('searchPlaceholder')}
+                            onKeyDown={e => e.key === 'Enter' && calculate()}
+                            onBlur={() => setTimeout(() => setShowSug(false), 150)} />
+                        {showSug && suggestions.length > 0 && (
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                                background: 'rgba(12,14,26,0.98)', border: '1px solid rgba(255,255,255,0.12)',
+                                borderRadius: '8px', marginTop: '2px', overflow: 'hidden' }}>
+                                {suggestions.map(s => (
+                                    <div key={s.id} onMouseDown={() => selectSuggestion(s)}
+                                        style={{ padding: '7px 10px', fontSize: '12px', cursor: 'pointer',
+                                            color: '#e2e8f0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,160,80,0.1)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        {s.name}
+                                        <span style={{ fontSize: '10px', color: '#475569', marginLeft: '5px' }}>{s.id}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <button style={S.btn} onClick={calculate} disabled={loading}>
                         {loading ? t('loading') : t('calcBtn')}
                     </button>
@@ -186,7 +231,7 @@ export default function TransportWidget({ city }) {
                     {filterMode === null && !top5Loading && (
                         <div style={{ ...S.card, textAlign: 'center' }}>
                             <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '10px', lineHeight: 1.5 }}>
-                                {t('filterAll')} или {t('filterSafe')}?
+                                {t('filterAll')} {t('orLabel')} {t('filterSafe')}?
                             </div>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <button onClick={() => handleFilterChoice('all')} style={{
@@ -220,7 +265,7 @@ export default function TransportWidget({ city }) {
 
                     {top5Loading && (
                         <div style={{ color: '#475569', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>
-                            {t('loading')} ТОП-5…
+                            {t('loading')} TOP-5…
                         </div>
                     )}
 

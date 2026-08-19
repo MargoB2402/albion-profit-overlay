@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
-import { useI18n } from '../hooks/useI18n';
+import { useI18n, getLang } from '../hooks/useI18n';
 
 const fmt = n =>
     n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M'
@@ -45,7 +45,7 @@ function SearchDropdown({ query, onSelect, config, t }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet  || '';
                 const token  = config.token   || '';
-                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&filterType=GEAR_ONLY`;
+                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&filterType=GEAR_ONLY&lang=${getLang()}`;
                 const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data = res?.data ?? res;
                 if (Array.isArray(data) && data.length) { setSuggestions(data); setVisible(true); }

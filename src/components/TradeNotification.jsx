@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useI18n } from '../hooks/useI18n';
 
 const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(Math.round(n));
 
@@ -13,6 +14,7 @@ const QUALITY = [
 
 export default function TradeNotification({ trade, onConfirm, onDismiss }) {
     const { saveTrade } = useApi();
+    const { t } = useI18n();
     const [saving, setSaving] = useState(false);
     const [saved,  setSaved]  = useState(false);
     const [quality, setQuality] = useState(1);
@@ -28,7 +30,7 @@ export default function TradeNotification({ trade, onConfirm, onDismiss }) {
             setSaved(true);
             setTimeout(onConfirm, 1500);
         } catch (e) {
-            alert('Ошибка записи: ' + e.message);
+            alert(t('error') + ': ' + e.message);
         }
         setSaving(false);
     };
@@ -42,13 +44,13 @@ export default function TradeNotification({ trade, onConfirm, onDismiss }) {
             animation: 'slideUp 0.2s ease-out',
         }}>
             <div style={{ fontSize: '11px', color: isBuy ? '#3b82f6' : '#22c55e', fontWeight: '700', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {isBuy ? '📥 Покупка обнаружена' : '📤 Продажа обнаружена'}
+                {isBuy ? `📥 ${t('quickBought')}` : `📤 ${t('tradeDetectedSell')||'Sale detected'}`}
             </div>
 
             <div style={{ marginBottom: '10px' }}>
                 <div style={{ fontWeight: '700', fontSize: '14px', color: '#e2e8f0', marginBottom: '2px' }}>{p.item_name || p.item_id}</div>
                 <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                    {p.quantity} шт × {fmt(p.price)} = <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{fmt(total)}</span> сер.
+                    {p.quantity} {t('craftPcs')} × {fmt(p.price)} = <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{fmt(total)}</span>
                     <span style={{ marginLeft: '8px' }}>📍 {p.city}</span>
                 </div>
                 {/* Quality picker */}

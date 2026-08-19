@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
-import { useI18n } from '../hooks/useI18n';
+import { useI18n, getLang } from '../hooks/useI18n';
 
 const fmt = n =>
     n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M'
@@ -35,7 +35,7 @@ function SearchDropdown({ query, onSelect, config }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet  || '';
                 const token  = config.token   || '';
-                const url    = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=7`;
+                const url    = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=7&lang=${getLang()}`;
                 const res    = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data   = res?.data ?? res;
                 if (Array.isArray(data) && data.length) { setSuggestions(data); setVisible(true); }
@@ -236,19 +236,19 @@ export default function CraftWidget({ city }) {
                                                     {copied === ing.id ? '✓' : '⎘'}
                                                 </button>
                                             </div>
-                                            <div style={{ fontSize: '10px', color: '#475569' }}>Цена: {fmt(ing.price)} шт.</div>
+                                            <div style={{ fontSize: '10px', color: '#475569' }}>{t('craftPriceLabel')} {fmt(ing.price)} {t('craftPcs')}</div>
                                         </div>
                                         {!ing.isRefundable && <span style={{ fontSize: '9px', color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '1px 5px', borderRadius: '4px', flexShrink: 0 }}>—RRR</span>}
                                     </div>
                                     {/* Нужно / Сгорит */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                                         <div style={{ color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                            <span>Закуп:</span>
-                                            <span>Сгорит ({rrr}%):</span>
+                                            <span>{t('craftBuyLabel')}</span>
+                                            <span>{t('craftBurnLabel')} ({rrr}%):</span>
                                         </div>
                                         <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                            <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{Math.ceil(grossTotal)} шт. <span style={{ color: '#475569', fontWeight: '400' }}>({fmt(grossCost)})</span></span>
-                                            <span style={{ color: '#22c55e', fontWeight: '700' }}>{Math.ceil(netTotal)} шт. <span style={{ color: '#475569', fontWeight: '400' }}>({fmt(netCost)})</span></span>
+                                            <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{Math.ceil(grossTotal)} {t('craftPcs')}<span style={{ color: '#475569', fontWeight: '400' }}>({fmt(grossCost)})</span></span>
+                                            <span style={{ color: '#22c55e', fontWeight: '700' }}>{Math.ceil(netTotal)} {t('craftPcs')}<span style={{ color: '#475569', fontWeight: '400' }}>({fmt(netCost)})</span></span>
                                         </div>
                                     </div>
                                 </div>
@@ -256,7 +256,7 @@ export default function CraftWidget({ city }) {
                         })}
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '4px' }}>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Бюджет (закуп):</span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t('craftBudgetLabel')}</span>
                             <span style={{ fontSize: '11px', color: '#94a3b8' }}>{fmt(recipe.ingredients.reduce((s, ing) => s + ing.grossCount * ops * ing.price, 0) + (recipe.fee || 0) * ops)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '4px' }}>

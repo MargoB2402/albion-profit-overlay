@@ -13,6 +13,7 @@ const S = {
     slider:  { width: '100%', accentColor: '#c8a050', cursor: 'pointer' },
     warning: { fontSize: '10px', color: '#f59e0b', lineHeight: 1.5, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: '7px', padding: '7px 9px', marginTop: '6px' },
     toggle:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
+    ghost:   { padding: '8px', background: 'rgba(255,255,255,0.06)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '12px' },
 };
 
 function ToggleSwitch({ checked, onChange }) {
@@ -34,12 +35,13 @@ function ToggleSwitch({ checked, onChange }) {
 }
 
 export default function Settings({ onClose }) {
-    const { config, saveConfig, isLoggedIn } = useApi();
+    const { config, saveConfig, logout, isLoggedIn, isPro, isProPlus } = useApi();
     const { t, lang } = useI18n();
 
     const [wallet,  setWallet]  = useState(config.wallet       || '');
     const [token,   setToken]   = useState(config.token        || '');
     const [autoLog, setAutoLog] = useState(config.autoLogTrade || false);
+    const [region,  setRegion]  = useState(config.region       || 'europe');
     const [saved,     setSaved]     = useState(false);
 
     // Debug mode state
@@ -61,12 +63,19 @@ export default function Settings({ onClose }) {
             wallet:          wallet.trim(),
             token:           token.trim(),
             autoLogTrade:    autoLog,
+            region:          region,
             filterMaxAge:    Number(maxAge),
             filterMinDaily:  Number(minDaily),
             filterMaxMargin: Number(maxMargin),
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
+    };
+
+    const handleLogout = () => {
+        logout();
+        setWallet('');
+        setToken('');
     };
 
     return (
@@ -83,9 +92,28 @@ export default function Settings({ onClose }) {
                 border: `1px solid ${isLoggedIn ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.3)'}`,
                 borderRadius: '8px', padding: '8px 10px', marginBottom: '10px', fontSize: '11px',
             }}>
-                {isLoggedIn
-                    ? <span style={{ color: '#22c55e' }}>✅ {t('accountOk')}</span>
-                    : <span style={{ color: '#f59e0b' }}>
+                {isLoggedIn ? (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#22c55e' }}>
+                                ✅ {t('accountOk')}
+                                {isProPlus && <span style={{ marginLeft: '6px', color: '#a78bfa', fontWeight: 700 }}>PRO+</span>}
+                                {!isProPlus && isPro && <span style={{ marginLeft: '6px', color: '#c8a050', fontWeight: 700 }}>PRO</span>}
+                                {!isPro && !isProPlus && <span style={{ marginLeft: '6px', color: '#64748b' }}>Free</span>}
+                            </span>
+                            <button
+                                onClick={handleLogout}
+                                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', borderRadius: '6px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }}
+                            >
+                                {t('logoutBtn') || 'Выйти'}
+                            </button>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', lineHeight: 1.4 }}>
+                            {config.wallet ? `${config.wallet.slice(0, 8)}...${config.wallet.slice(-6)}` : ''}
+                        </div>
+                    </div>
+                ) : (
+                    <span style={{ color: '#f59e0b' }}>
                         ⚠️ {t('accountNo') || 'Аккаунт не подключён'}<br/>
                         <span style={{ fontSize: '10px', color: '#64748b', marginTop: '4px', display: 'block', lineHeight: 1.5 }}>
                             {t('accountHowTo') || 'Войди на'}{' '}
@@ -93,13 +121,22 @@ export default function Settings({ onClose }) {
                             {' → '}
                             {t('accountHowTo2') || 'Профиль → Overlay Token → скопируй Wallet и Token'}
                         </span>
-                      </span>}
+                    </span>
+                )}
             </div>
 
             {/* Language */}
             <label style={S.label}>{t('langLabel')}</label>
             <select style={S.select} value={lang} onChange={e => setLang(e.target.value)}>
                 {LANG_OPTIONS.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+            </select>
+
+            {/* Game server / region */}
+            <label style={S.label}>{t('serverLabel') || 'Server'}</label>
+            <select style={S.select} value={region} onChange={e => setRegion(e.target.value)}>
+                <option value="europe">Europe</option>
+                <option value="west">Americas (West)</option>
+                <option value="east">Asia (East)</option>
             </select>
 
             {/* Wallet */}

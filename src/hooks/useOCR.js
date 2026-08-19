@@ -20,9 +20,14 @@ const CITY_PATTERNS = [
     { city: 'Martlock',      re: /[mмМ][aаА][rрPгГ][tТ][lлЛ1]/i },
     { city: 'Caerleon',      re: /[cсС][aаА][eеЕ][rрPгГ]/i },
     { city: 'Brecilien',     re: /[bбБ][rрPгГ][eеЕ][cсС][iиИ]/i },
-    // OCR может читать "Black" как "Bl ck" или "Bla ck" → матчим "Bl" + до 3 символов + "ck"
-    { city: 'Black Market',  re: /[bбБ][lлЛ].{0,3}[cсС][kкК]/i },
 ];
+
+// Заголовок Чёрного рынка во всех языках клиента.
+// ЧР физически НАХОДИТСЯ в Caerleon → на мини-карте всегда "Caerleon",
+// поэтому заголовок окна ЧР проверяем ПЕРВЫМ и он перебивает Caerleon.
+//   RU "Чёрный рынок" · EN "Black Market" · DE "Schwarzmarkt"
+//   ES/PT "Mercado Negro" · FR "Marché noir" · IT "Mercato Nero"
+const BLACK_MARKET_RE = /ч[ёе]рн\w*\s*р[ыiі]н|black\s*mark|schwarzmarkt|mercado\s*negro|march[eé]\s*noir|mercato\s*nero/i;
 
 // Паттерны которые НЕ являются названиями предметов
 const SKIP_PATTERNS = [
@@ -57,10 +62,17 @@ function parseMarketOCR(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
     const result = { city: null, item: null, enchant: null, prices: [] };
 
-    // 1. Город: единый fuzzy-проход по CITY_PATTERNS — покрывает точные и OCR-искажённые имена.
-    for (const { city, re } of CITY_PATTERNS) {
-        if (re.test(text)) { result.city = city; break; }
+    // 1. Город. Сначала проверяем заголовок ЧР — он находится в Caerleon,
+    //    поэтому ДОЛЖЕН перебивать "Caerleon" с мини-карты.
+    if (BLACK_MARKET_RE.test(text)) {
+        result.city = 'Black Market';
+    } else {
+        // Единый fuzzy-проход по CITY_PATTERNS — точные и OCR-искажённые имена.
+        for (const { city, re } of CITY_PATTERNS) {
+            if (re.test(text)) { result.city = city; break; }
+        }
     }
+    result.isBlackMarket = result.city === 'Black Market';
 
     // 2. Зачарование: фильтровые кнопки рынка [.1][.2][.3] всегда видны → OCR читает ".1" из кнопки.
     // Требуем ≥2 вхождений одного уровня — кнопка даёт 1 раз, реальный список (3+ рядов) даёт 3+ раз.
@@ -116,19 +128,21 @@ function parseMarketOCR(text) {
         // Паттерны:
         //   \d{1,3}[.,]\d{3}  — "14.993", "96,999" (разделитель тысяч точка/запятая)
         //   \d{3,7}           — "979", "14993" — простое число 3-7 цифр (без пробела!)
-        // НЕ используем \d\s\d{3}: "981 981" (две цены подряд) давало ложный 981981
-        // Зазор 6px между полосами в composite не даёт OCR склеивать соседние строки
+        // ВАЖНО: пробел [ ] намеренно убран из разделителя тысяч!
+        //   При 1080p два ценника в соседних строках ("153 159") могут попасть
+        //   на одну строку OCR → "153 159" → regex с пробелом читал как "153159".
+        //   Anchor-метод (Купить) корректно парсит "4 996" через свой regex.
+        //   Fallback-ом "4 996" даст "996" (недоточность), зато "153 159" → [153, 159].
         const raw = [];
         // min=30: максимальный листинговый период в Albion — 29 дней, 23 часа.
         // Всё что < 30 — это компоненты времени, не цены.
-        // Цены ≥ 30 серебра (самые дешёвые предметы T1-T2) будут захвачены.
         // (?:[.,]\d{3})+ — несколько групп: "2,990,488" и "3,000,000" теперь читаются правильно
-        // [ .,] — пробел как разделитель тысяч (русская локаль: "1 199 987") + точка/запятая
-        const priceRe = /\b\d{1,3}(?:[ .,]\d{3})+\b|\b\d{3,9}\b/g;
+        // \d{3,7} — простое число без разделителя, до 7 цифр (≤9 999 999, покрывает T8)
+        const priceRe = /\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{3,7}\b/g;
         for (const line of lines) {
             let m;
             while ((m = priceRe.exec(line)) !== null) {
-                const val = parseInt(m[0].replace(/[ .,]/g, ''), 10);
+                const val = parseInt(m[0].replace(/[.,]/g, ''), 10);
                 if (val >= 30 && val <= 999_000_000) raw.push(val);
             }
             priceRe.lastIndex = 0;

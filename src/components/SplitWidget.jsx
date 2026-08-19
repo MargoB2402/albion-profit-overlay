@@ -23,25 +23,38 @@ export default function SplitWidget({ city }) {
     const [result,  setResult]  = useState(null);
     const [loading, setLoading] = useState(false);
 
+    const [copied, setCopied] = useState(false);
+
+    // Парсимо рядок: "5 T8 Bloodletter", "T8 Bloodletter x5", "T8 Bloodletter*3" → { name, qty }
+    const parseLine = (line) => {
+        let m = line.match(/^(\d+)\s*[x×*]?\s+(.+)$/);
+        if (m) return { qty: Math.max(1, parseInt(m[1])), name: m[2].trim() };
+        m = line.match(/^(.+?)\s*[x×*]\s*(\d+)$/);
+        if (m) return { qty: Math.max(1, parseInt(m[2])), name: m[1].trim() };
+        return { qty: 1, name: line.trim() };
+    };
+
     const calculate = async () => {
         setLoading(true);
+        setCopied(false);
         try {
             let total = 0;
-            const lines = [];
+            const lines = [];   // { text, qty, name, value, ok }
             if (mode === 'amount') {
                 total = Number(amount.replace(/\s/g, ''));
-                lines.push(`💰 ${fmt(total)}`);
+                lines.push({ text: `💰 ${fmt(total)}`, ok: true });
             } else {
-                const names = items.split('\n').map(s => s.trim()).filter(Boolean);
-                for (const name of names) {
+                const parsed = items.split('\n').map(s => s.trim()).filter(Boolean).map(parseLine);
+                for (const { name, qty } of parsed) {
                     const data = await fetchPrice(name);
                     if (data?.success && !data.locked) {
-                        const best = data.prices.find(p => p.city === city) || data.prices.sort((a, b) => b.sell - a.sell)[0];
+                        const best  = data.prices.find(p => p.city === city) || data.prices.sort((a, b) => b.sell - a.sell)[0];
                         const price = best?.sell || 0;
-                        total += price;
-                        lines.push(`• ${data.itemName}: ${fmt(price)}`);
+                        const value = price * qty;
+                        total += value;
+                        lines.push({ text: `• ${data.itemName} ×${qty}: ${fmt(value)}`, qty, name: data.itemName, value, ok: true });
                     } else {
-                        lines.push(`• ${name}: ${t('noResults')}`);
+                        lines.push({ text: `• ${name} ×${qty}: ${t('noResults')}`, qty, name, value: 0, ok: false });
                     }
                 }
             }
@@ -50,6 +63,19 @@ export default function SplitWidget({ city }) {
             setResult({ total, afterTax, perPlayer, lines });
         } catch {}
         setLoading(false);
+    };
+
+    const copyForDiscord = () => {
+        if (!result) return;
+        const head = `**⚔️ Loot Split${city && city !== 'unknown' ? ` — ${city}` : ''}**`;
+        const body = result.lines.filter(l => l.name).map(l => `• ${l.name} ×${l.qty} — ${fmt(l.value)}`).join('\n');
+        const foot = `\n— — —\nTotal: ${fmt(result.total)}  |  ${t('afterTaxLabel')} ${tax}%: ${fmt(result.afterTax)}\n👥 ${players} → **${fmt(result.perPlayer)}** ${t('perPlayer')}`;
+        const text = [head, body, foot].filter(Boolean).join('\n');
+        try {
+            navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {}
     };
 
     return (
@@ -71,7 +97,8 @@ export default function SplitWidget({ city }) {
                     <label style={S.label}>{t('itemsList')}</label>
                     <textarea style={{ ...S.input, height: '80px', resize: 'vertical' }}
                         value={items} onChange={e => setItems(e.target.value)}
-                        placeholder={"T7 Bloodletter\nT6 Guardian Helmet\nT8 Rune Dagger"} />
+                        placeholder={"5 T7 Bloodletter\nT6 Guardian Helmet x2\nT8 Rune Dagger"} />
+                    <div style={{ fontSize: '9px', color: '#475569', marginTop: '3px' }}>{t('splitQtyHint') || 'Кол-во: «5 T7 Меч» или «T7 Меч x5»'}</div>
                 </div>
             ) : (
                 <div style={{ marginBottom: '8px' }}>
@@ -101,17 +128,23 @@ export default function SplitWidget({ city }) {
                     border: '1px solid rgba(200,160,80,0.2)', borderRadius: '9px', padding: '10px 12px',
                 }}>
                     {result.lines.map((l, i) => (
-                        <div key={i} style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>{l}</div>
+                        <div key={i} style={{ fontSize: '11px', color: l.ok === false ? '#ef4444' : '#64748b', marginBottom: '2px' }}>{l.text}</div>
                     ))}
                     <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '8px', paddingTop: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
                             <span style={{ color: '#475569' }}>{t('afterTaxLabel')} {tax}%</span>
                             <span style={{ color: '#94a3b8' }}>{fmt(result.afterTax)}</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
                             <span style={{ color: '#c8a050', fontWeight: '700' }}>{players} {t('perPlayer')}</span>
                             <span style={{ color: '#22c55e', fontWeight: '800' }}>{fmt(result.perPlayer)}</span>
                         </div>
+                        <button onClick={copyForDiscord} style={{
+                            width: '100%', padding: '7px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700',
+                            border: '1px solid #5865F2', background: copied ? '#22c55e' : 'rgba(88,101,242,0.15)', color: copied ? '#000' : '#a5b4fc',
+                        }}>
+                            {copied ? (t('splitCopied') || '✓ Скопировано') : (t('splitCopyDiscord') || '📋 Копировать для Discord')}
+                        </button>
                     </div>
                 </div>
             )}

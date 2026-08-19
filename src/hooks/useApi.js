@@ -1,5 +1,6 @@
 // Все запросы к API идут через Electron main process (IPC) — без CORS
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getLang } from './useI18n.js';
 
 const API_BASE = 'https://promptly.sbs';
 
@@ -62,14 +63,20 @@ export function useApi() {
     }, []);
 
     // Запрос цен предмета
-    const fetchPrice = useCallback(async (query, region = 'europe') => {
+    const fetchPrice = useCallback(async (query, quality = 1, region = null) => {
         const base   = config.apiBase || API_BASE;
         const wallet = config.wallet;
         const token  = config.token;
+        const reg    = region || config.region || 'europe';
         try {
-            const data = await apiFetch(
-                `${base}/api/overlay/item-price?q=${encodeURIComponent(query)}&region=${region}&wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}`
+            const resp = await fetch(
+                `${base}/api/overlay/item-price?q=${encodeURIComponent(query)}&quality=${quality}&region=${reg}&lang=${getLang()}&wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}`
             );
+            const data = await resp.json();
+            // 401 — не залогінен
+            if (resp.status === 401 || data?.error === 'not_logged_in') {
+                return { success: false, reason: 'not_logged_in' };
+            }
             if (data?.success) return data;
         } catch {}
         return { success: false };
@@ -124,10 +131,12 @@ export function useApi() {
         try {
             const params = new URLSearchParams({
                 wallet, token, from, to, tax,
+                region:    config.region || 'europe',
                 safetyFilter: String(safetyFilter),
                 maxAge:    config.filterMaxAge    ?? 4,
                 minDaily:  config.filterMinDaily  ?? 7,
                 maxMargin: config.filterMaxMargin ?? 100,
+                lang: getLang(),
             });
             return await apiFetch(`${base}/api/overlay/transport-top?${params}`);
         } catch { return { success: false }; }
@@ -165,9 +174,56 @@ export function useApi() {
             });
             await apiFetch(`${base}/api/overlay/contribute-price`, {
                 method: 'POST',
-                body: { wallet, token, itemId, city: cityEn, price, quality: ocr.quality || 1, sig, ts },
+                body: { wallet, token, itemId, city: cityEn, price, quality: ocr.quality || 1, sig, ts, region: config.region || 'europe' },
             });
         } catch {}
+    }, [config]);
+
+    // 🎯 АОДП-контрибуция: шлём ТОЧНЫЕ ордера агента (price+quality+is_offer).
+    // Группируем по (quality, is_offer): is_offer=false (ЧР/buy) → max, is_offer=true (offer) → min.
+    const contribOrdersCd = useRef({});
+    const contributeOrders = useCallback(async ({ city, itemId, orders }) => {
+        const base   = config.apiBase || API_BASE;
+        const wallet = config.wallet;
+        const token  = config.token;
+        if (!wallet || !token || !window.electron?.signPriceReport) return;
+        if (!city || !itemId || !Array.isArray(orders) || orders.length === 0) return;
+
+        const CITY_MAP = {
+            'Тетфорд': 'Thetford', 'Форт Стерлинг': 'Fort Sterling',
+            'Лимхёрст': 'Lymhurst', 'Бриджвотч': 'Bridgewatch',
+            'Мартлок': 'Martlock', 'Карлеон': 'Caerleon', 'Брецильен': 'Brecilien',
+            'Чёрный рынок': 'Black Market', 'Черный рынок': 'Black Market',
+        };
+        const cityEn = CITY_MAP[city] || city;
+
+        // Группируем по качеству и стороне ордера.
+        // ВАЖНО: агент отдаёт цену в ВНУТРЕННИХ единицах Albion (×10000, 4 знака после запятой).
+        // Реальное серебро = price / 10000.  (417120000 → 41712)
+        const groups = {};
+        for (const o of orders) {
+            const q = Number(o.quality) || 1;
+            const price = Math.round((Number(o.price) || 0) / 10000);
+            if (price < 1) continue; // агент даёт точные цены даже на 4-5 серебра — режем только 0/мусор
+            const side = o.is_offer ? 'sell' : 'buy';
+            const k = `${q}_${side}`;
+            (groups[k] ||= { q, side, prices: [] }).prices.push(price);
+        }
+
+        const now = Date.now();
+        for (const { q, side, prices } of Object.values(groups)) {
+            const price = side === 'buy' ? Math.max(...prices) : Math.min(...prices);
+            const ck = `${itemId}_${cityEn}_${q}_${side}`;
+            if (contribOrdersCd.current[ck] && now - contribOrdersCd.current[ck] < 60_000) continue; // клиентский анти-спам 60с
+            try {
+                const { sig, ts } = await window.electron.signPriceReport({ itemId, city: cityEn, price, quality: q });
+                await apiFetch(`${base}/api/overlay/contribute-price`, {
+                    method: 'POST',
+                    body: { wallet, token, itemId, city: cityEn, price, quality: q, side, sig, ts, region: config.region || 'europe' },
+                });
+                contribOrdersCd.current[ck] = now;
+            } catch {}
+        }
     }, [config]);
 
     // Топ-5 крафта (для CraftWidget)
@@ -222,5 +278,15 @@ export function useApi() {
         verifySession(merged);
     }, [config, verifySession]);
 
-    return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, saveConfig, contributePrices, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
+    const logout = useCallback(() => {
+        const cleared = { ...config, wallet: '', token: '' };
+        setConfig(cleared);
+        window.electron?.saveConfig(cleared);
+        setIsLoggedIn(false);
+        setIsPro(false);
+        setIsProPlus(false);
+        setIsAdmin(false);
+    }, [config]);
+
+    return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
 }

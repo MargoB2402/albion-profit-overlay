@@ -23,6 +23,7 @@ const DICTS = {
         // PRO lock
         proLocked: 'Только PRO',
         proLockedMsg: 'T7–T8 и зачарованные предметы — только в пакете PRO',
+        proRequiredFullMsg: 'Оверлей доступен только при реально оплаченной подписке (короткие бесплатные промо-триалы не подходят)',
         upgradePro: '→ Оформить PRO',
         // Quick buy log
         quickBought: '📝 Купил',
@@ -58,6 +59,9 @@ const DICTS = {
         playersLabel: 'Игроков',
         calcSplit: '⚔️ Рассчитать',
         perPlayer: 'чел.',
+        splitQtyHint: 'Кол-во: «5 T7 Меч» или «T7 Меч x5»',
+        splitCopyDiscord: '📋 Копировать для Discord',
+        splitCopied: '✓ Скопировано',
         // Alerts
         alertsLogin: 'Войдите в аккаунт в Настройках чтобы видеть алерты',
         alertsActive: 'Активных',
@@ -80,6 +84,7 @@ const DICTS = {
         hotkeysSection: 'Горячие клавиши',
         showHide: 'Показать / Скрыть',
         langLabel: 'Язык интерфейса',
+        serverLabel: 'Игровой сервер',
         filterSection: 'Фильтры маршрутов',
         filterMaxAge: 'Макс. возраст цены (ч)',
         filterMinDaily: 'Мин. продаж в день',
@@ -98,6 +103,8 @@ const DICTS = {
         craftRrr: 'Возврат (RRR) %', craftPcs: 'шт.', craftQty: 'Кол-во',
         craftSendLedger: 'В бухгалтерию', craftLedgerDone: '✅ Добавлено!',
         craftLedgerProPlus: 'Только PRO+', craftCopied: '✓',
+        craftBuyLabel: 'Закуп:', craftBurnLabel: 'Сгорит', craftBudgetLabel: 'Бюджет (закуп):', craftPriceLabel: 'Цена:',
+        orLabel: 'или',
         // Enchant widget
         enchantProLocked: 'Зачарование — только PRO', enchantProMsg: 'Оформите PRO для доступа к калькулятору зачарования',
         enchantSearch: 'Предмет для зачарования...', enchantFrom: 'Базовое', enchantTo: 'Цель',
@@ -105,6 +112,8 @@ const DICTS = {
         enchantBestProfit: 'Лучший профит', enchantBuyIn: 'Купить в', enchantResIn: 'Ресурсы в',
         enchantSellIn: 'Продать в', enchantSendLedger: 'В бухгалтерию',
         enchantLedgerDone: '✅ Добавлено!', enchantLedgerProPlus: 'Только PRO+',
+        // Quality PRO+ gate
+        qualityProPlus: 'Мониторинг цен по качествам — только PRO+',
         // General
         loading: '...',
         error: 'Ошибка',
@@ -124,6 +133,7 @@ const DICTS = {
         noResults: 'Not found',
         proLocked: 'PRO Required',
         proLockedMsg: 'T7–T8 and enchanted items require PRO plan',
+        proRequiredFullMsg: 'Overlay access requires an actively paid subscription (short free trials don\'t qualify)',
         upgradePro: '→ Get PRO',
         quickBought: '📝 Bought',
         buyQty: 'Quantity',
@@ -156,6 +166,9 @@ const DICTS = {
         playersLabel: 'Players',
         calcSplit: '⚔️ Calculate',
         perPlayer: 'each',
+        splitQtyHint: 'Qty: "5 T7 Sword" or "T7 Sword x5"',
+        splitCopyDiscord: '📋 Copy for Discord',
+        splitCopied: '✓ Copied',
         alertsLogin: 'Log in to your account in Settings to see alerts',
         alertsActive: 'Active',
         alertsAdd: '+ Add →',
@@ -176,6 +189,7 @@ const DICTS = {
         hotkeysSection: 'Hotkeys',
         showHide: 'Show / Hide',
         langLabel: 'Interface language',
+        serverLabel: 'Game server',
         filterSection: 'Route Filters',
         filterMaxAge: 'Max price age (h)',
         filterMinDaily: 'Min daily sales',
@@ -192,12 +206,15 @@ const DICTS = {
         craftRrr: 'Return (RRR) %', craftPcs: 'pcs', craftQty: 'Qty',
         craftSendLedger: 'To ledger', craftLedgerDone: '✅ Logged!',
         craftLedgerProPlus: 'PRO+ only', craftCopied: '✓',
+        craftBuyLabel: 'Buy:', craftBurnLabel: 'Burns', craftBudgetLabel: 'Budget (buy):', craftPriceLabel: 'Price:',
+        orLabel: 'or',
         enchantProLocked: 'Enchanting — PRO only', enchantProMsg: 'Get PRO to access the enchanting calculator',
         enchantSearch: 'Item to enchant...', enchantFrom: 'Base', enchantTo: 'Target',
         enchantCalc: 'Calculate', enchantLoading: 'Calculating...', enchantNoData: 'No data',
         enchantBestProfit: 'Best profit', enchantBuyIn: 'Buy in', enchantResIn: 'Resources in',
         enchantSellIn: 'Sell in', enchantSendLedger: 'To ledger',
         enchantLedgerDone: '✅ Logged!', enchantLedgerProPlus: 'PRO+ only',
+        qualityProPlus: 'Price monitoring by quality requires PRO+',
         loading: '...',
         error: 'Error',
     },
@@ -248,6 +265,9 @@ const DICTS = {
         playersLabel: 'Spieler',
         calcSplit: '⚔️ Berechnen',
         perPlayer: 'je',
+        splitQtyHint: 'Menge: "5 T7 Schwert" oder "T7 Schwert x5"',
+        splitCopyDiscord: '📋 Für Discord kopieren',
+        splitCopied: '✓ Kopiert',
         alertsLogin: 'In den Einstellungen anmelden um Alarme zu sehen',
         alertsActive: 'Aktiv',
         alertsAdd: '+ Hinzufügen →',
@@ -268,6 +288,7 @@ const DICTS = {
         hotkeysSection: 'Tastenkürzel',
         showHide: 'Zeigen / Verstecken',
         langLabel: 'Sprache',
+        serverLabel: 'Spielserver',
         filterSection: 'Routenfilter',
         filterMaxAge: 'Max. Preisalter (h)',
         filterMinDaily: 'Min. tägliche Verkäufe',
@@ -283,6 +304,8 @@ const DICTS = {
         craftIngredients: 'Zutaten', craftTotalCost: 'Nettokosten',
         craftRrr: 'Rückgabe (RRR) %', craftPcs: 'Stk.', craftQty: 'Menge',
         craftSendLedger: 'Ins Handelsbuch', craftLedgerDone: '✅ Erfasst!',
+        craftBuyLabel: 'Kauf:', craftBurnLabel: 'Verbrannt', craftBudgetLabel: 'Budget (Kauf):', craftPriceLabel: 'Preis:',
+        orLabel: 'oder',
         craftLedgerProPlus: 'Nur PRO+', craftCopied: '✓',
         enchantProLocked: 'Verzauberung — nur PRO', enchantProMsg: 'PRO für Verzauberungsrechner erwerben',
         enchantSearch: 'Gegenstand verzaubern...', enchantFrom: 'Basis', enchantTo: 'Ziel',
@@ -290,6 +313,7 @@ const DICTS = {
         enchantBestProfit: 'Bester Gewinn', enchantBuyIn: 'Kaufen in', enchantResIn: 'Ressourcen in',
         enchantSellIn: 'Verkaufen in', enchantSendLedger: 'Ins Handelsbuch',
         enchantLedgerDone: '✅ Erfasst!', enchantLedgerProPlus: 'Nur PRO+',
+        qualityProPlus: 'Preisüberwachung nach Qualität erfordert PRO+',
         loading: '...',
         error: 'Fehler',
     },
@@ -340,6 +364,9 @@ const DICTS = {
         playersLabel: 'Jugadores',
         calcSplit: '⚔️ Calcular',
         perPlayer: 'c/u',
+        splitQtyHint: 'Cant.: "5 T7 Espada" o "T7 Espada x5"',
+        splitCopyDiscord: '📋 Copiar para Discord',
+        splitCopied: '✓ Copiado',
         alertsLogin: 'Inicia sesión en Ajustes para ver alertas',
         alertsActive: 'Activas',
         alertsAdd: '+ Añadir →',
@@ -360,6 +387,7 @@ const DICTS = {
         hotkeysSection: 'Atajos de teclado',
         showHide: 'Mostrar / Ocultar',
         langLabel: 'Idioma',
+        serverLabel: 'Servidor de juego',
         filterSection: 'Filtros de ruta',
         filterMaxAge: 'Edad máx. precio (h)',
         filterMinDaily: 'Ventas mín. diarias',
@@ -375,6 +403,8 @@ const DICTS = {
         craftIngredients: 'Ingredientes', craftTotalCost: 'Coste neto',
         craftRrr: 'Retorno (RRR) %', craftPcs: 'ud.', craftQty: 'Cantidad',
         craftSendLedger: 'Al libro', craftLedgerDone: '✅ Añadido!',
+        craftBuyLabel: 'Compra:', craftBurnLabel: 'Consume', craftBudgetLabel: 'Presupuesto (compra):', craftPriceLabel: 'Precio:',
+        orLabel: 'o',
         craftLedgerProPlus: 'Solo PRO+', craftCopied: '✓',
         enchantProLocked: 'Encantamiento — solo PRO', enchantProMsg: 'Obtén PRO para la calculadora de encantamiento',
         enchantSearch: 'Objeto a encantar...', enchantFrom: 'Base', enchantTo: 'Objetivo',
@@ -382,6 +412,7 @@ const DICTS = {
         enchantBestProfit: 'Mejor beneficio', enchantBuyIn: 'Comprar en', enchantResIn: 'Recursos en',
         enchantSellIn: 'Vender en', enchantSendLedger: 'Al libro',
         enchantLedgerDone: '✅ Añadido!', enchantLedgerProPlus: 'Solo PRO+',
+        qualityProPlus: 'Monitoreo de precios por calidad requiere PRO+',
         loading: '...',
         error: 'Error',
     },
@@ -395,13 +426,21 @@ export const LANG_OPTIONS = [
 ];
 
 function getInitialLang() {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'ru';
-    try { return localStorage.getItem(STORAGE_KEY) || 'ru'; } catch { return 'ru'; }
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'en';
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved && DICTS[saved]) return saved;
+        // Автодетект мови браузера/системи
+        const browserLang = (navigator.language || navigator.userLanguage || 'en').slice(0, 2).toLowerCase();
+        return DICTS[browserLang] ? browserLang : 'en';
+    } catch { return 'en'; }
 }
 
-let _lang = 'ru'; // инициализируется лениво при первом useI18n()
+let _lang = 'en'; // дефолт EN — потім перезаписується з localStorage або browser lang
 let _initialized = false;
 const _listeners = new Set();
+
+export function getLang() { return _lang; }
 
 export function setLang(code) {
     if (!DICTS[code]) return;
@@ -421,7 +460,8 @@ export function useI18n() {
     }, []);
 
     const t = useCallback((key) => {
-        return DICTS[lang]?.[key] ?? DICTS.ru[key] ?? key;
+        // Fallback: поточна мова → English → raw key (не Russian!)
+        return DICTS[lang]?.[key] ?? DICTS.en?.[key] ?? key;
     }, [lang]);
 
     return { t, lang, setLang };

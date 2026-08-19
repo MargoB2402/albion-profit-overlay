@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useOCR } from '../hooks/useOCR';
-import { useI18n } from '../hooks/useI18n';
+import { useI18n, getLang } from '../hooks/useI18n';
 
 const fmt = n => n >= 1_000_000
     ? (n / 1_000_000).toFixed(2) + 'M'
@@ -31,7 +31,7 @@ function SearchDropdown({ query, onSelect, apiFetch, config, t }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet || '';
                 const token  = config.token  || '';
-                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6`;
+                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&lang=${getLang()}`;
                 const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data = res?.data ?? res;
                 if (Array.isArray(data) && data.length > 0) { setSuggestions(data); setVisible(true); }
@@ -147,7 +147,7 @@ function QuickLogPanel({ result, city, ocrPrices, onSave, onClose, t }) {
 }
 
 export default function PriceWidget({ city, lastEvent, onOCRCity }) {
-    const { fetchPrice, contributePrices, config, isLoggedIn } = useApi();
+    const { fetchPrice, contributeOrders, config, isLoggedIn, isProPlus } = useApi();
     const { t } = useI18n();
     // Город определяется только OCR — marketCity IS city, приходит снаружи через onOCRCity
     const marketCityRef = useRef(null); // синхронная копия для использования в callback-ах
@@ -155,6 +155,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
     const [query,      setQuery]      = useState('');
     const [result,     setResult]     = useState(null);
     const [loading,    setLoading]    = useState(false);
+    const [quality,    setQuality]    = useState(1); // качество из агента (market_view)
     const [ocrEnabled,    setOcrEnabled]    = useState(true);
     const [showLog,       setShowLog]       = useState(false);
     const [contribStatus, setContribStatus] = useState(''); // видимый статус последней попытки отправки
@@ -168,18 +169,15 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
     const lastOcrRef      = useRef(null);
     const inputRef        = useRef(null);
     const dropdownRef     = useRef(null);
-    const contribCooldown = useRef({}); // { "itemId_city": timestamp }
-    const pendingContrib  = useRef(null);  // { itemId, city }
-    const ocrPriceBuffer  = useRef([]);    // rolling buffer of min-price per scan, сбрасывается при смене предмета
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
-    // doSearch: только API-запрос + UI. Contribution НЕ делает — за это отвечает pendingContrib.
-    const doSearch = useCallback(async (q) => {
+    // doSearch: только API-запрос + UI. Контрибуция идёт из агента (market_view).
+    const doSearch = useCallback(async (q, qual = 1) => {
         if (!q?.trim()) return;
         setLoading(true);
         setShowLog(false);
         try {
-            const data = await fetchPrice(q);
+            const data = await fetchPrice(q, qual);
             if (data?.success) setResult(data);
             else setResult(null);
         } catch {}
@@ -197,65 +195,41 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
         onCityDetect: useCallback((c) => { if (c) { marketCityRef.current = c; onOCRCity?.(c); } }, [onOCRCity]),
     });
 
-    // Agent market_view: только подставляет query и запускает поиск.
-    // Contribution откладывается до следующего OCR-скана (pendingContrib).
-    // ВАЖНО: lastResult НЕ должен быть в deps — иначе эффект перезапускается каждые 2.5с
-    // и changedAt сбрасывается, не давая таймеру истечь. Город берём из ref, не из state.
+    // Agent market_view: подставляет query, запускает поиск И контрибьютит ТОЧНЫЕ цены агента.
+    // Город, цены, качество и сторона (buy/sell) — всё из агента (АОДП), без OCR-угадывания.
     useEffect(() => {
-        if (lastEvent?.type === 'market_view') {
-            const id = lastEvent.payload.item_id;
-            if (!id) return;
-            setQuery(id);
-            doSearch(id);
-            const bestCity = marketCityRef.current || null;
-            pendingContrib.current = { itemId: id, city: bestCity || null, changedAt: Date.now() };
+        if (lastEvent?.type !== 'market_view') return;
+        const p = lastEvent.payload;
+        const id = p?.item_id;
+        if (!id) return;
+
+        const orders = Array.isArray(p.orders) ? p.orders : [];
+        const detectedQuality = orders.length > 0 ? (orders[0].quality || 1) : 1;
+        setQuery(id);
+        setQuality(detectedQuality);
+        doSearch(id, isProPlus ? detectedQuality : 1);
+
+        // ЧР определяет агент (OCR не читает заголовок окна ЧР — видит лишь "Caerl on" с мини-карты).
+        // Агент при ЧР шлёт city="Black Market". Сигналы ЧР (любой срабатывает):
+        //   1. агент явно сказал "Black Market"
+        //   2. ВСЕ ордера is_offer:false (ЧР = только ордера на покупку) и физически мы в Caerleon
+        const VALID_CITIES = ['Thetford', 'Fort Sterling', 'Lymhurst', 'Bridgewatch', 'Martlock', 'Caerleon', 'Brecilien', 'Black Market'];
+        const allBuyOrders = orders.length > 0 && orders.every(o => o.is_offer === false);
+        const isBM = p.city === 'Black Market' || (allBuyOrders && marketCityRef.current === 'Caerleon');
+        const contribCity = isBM
+            ? 'Black Market'
+            : (VALID_CITIES.includes(marketCityRef.current) ? marketCityRef.current : null);
+        console.log('[CITY DBG] agent.city=', JSON.stringify(p.city), '| ocr=', JSON.stringify(marketCityRef.current), '| allBuy=', allBuyOrders, '→', contribCity);
+
+        // Контрибуция: точные ордера агента (price+quality+is_offer). buy=ЧР→max, offer→min.
+        if (isLoggedIn && contribCity && orders.length > 0) {
+            contributeOrders({ city: contribCity, itemId: id, orders });
+            setContribStatus(`✅ → ${contribCity} (${orders.length} ордеров)`);
+        } else if (!contribCity) {
+            setContribStatus('⚠️ город не определён (жду OCR)');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lastEvent, doSearch]);
-
-    // Contribution: ждём ≥1 OCR-цикла (2.5с) после смены предмета чтобы экран обновился
-    const OCR_INTERVAL_MS = 2500;
-    useEffect(() => {
-        const pending = pendingContrib.current;
-        if (!pending) { setContribStatus('⏳ нет market_view'); return; }
-        if (!lastResult?.prices?.length) {
-            setContribStatus('⏳ нет цен от OCR');
-            return;
-        }
-
-        const elapsed = Date.now() - pending.changedAt;
-        if (elapsed < OCR_INTERVAL_MS) {
-            setContribStatus(`⏳ жду ${OCR_INTERVAL_MS - elapsed}мс`);
-            return;
-        }
-
-        const { itemId, city: pendingCity } = pending;
-        const contribCity = lastResult?.city || city !== 'unknown' ? (lastResult?.city || city) : pendingCity;
-        if (!contribCity || contribCity === 'unknown') {
-            setContribStatus('⚠️ город не определён');
-            return;
-        }
-
-        const ck = `${itemId}_${contribCity}`;
-        const now = Date.now();
-        const cooldownLeft = contribCooldown.current[ck] ? (2 * 60 * 1000 - (now - contribCooldown.current[ck])) : 0;
-        if (cooldownLeft > 0) {
-            setContribStatus(`🕐 cooldown ${Math.round(cooldownLeft / 1000)}с`);
-            return;
-        }
-
-        const minPrice = Math.min(...lastResult.prices);
-        if (minPrice < 30) {
-            setContribStatus(`⛔ цена ${minPrice} < 30`);
-            pendingContrib.current = null;
-            return;
-        }
-
-        pendingContrib.current = null;
-        contribCooldown.current[ck] = now;
-        setContribStatus(`✅ → ${contribCity} ${minPrice}`);
-        contributePrices({ itemId, city: contribCity, prices: lastResult.prices, quality: lastResult.enchant || 1 });
-    }, [lastResult, contributePrices, city]);
 
     const handleSelect = useCallback((item) => {
         setQuery(item.name);
@@ -328,7 +302,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                         placeholder={t('searchPlaceholder')}
                         value={query}
                         onChange={e => { setQuery(e.target.value); setDropdownOpen(true); }}
-                        onKeyDown={e => { if (e.key === 'Enter') { setDropdownOpen(false); doSearch(query, lastOcrRef.current); } if (e.key === 'Escape') setDropdownOpen(false); }}
+                        onKeyDown={e => { if (e.key === 'Enter') { setDropdownOpen(false); doSearch(query, quality); } if (e.key === 'Escape') setDropdownOpen(false); }}
                         onFocus={() => query.length >= 2 && setDropdownOpen(true)}
                         onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
                     />
@@ -341,7 +315,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                         />
                     )}
                 </div>
-                <button style={SI.btn} onClick={() => { setDropdownOpen(false); doSearch(query, lastOcrRef.current); }} disabled={loading}>
+                <button style={SI.btn} onClick={() => { setDropdownOpen(false); doSearch(query, quality); }} disabled={loading}>
                     {loading ? '…' : '🔍'}
                 </button>
             </div>
@@ -357,15 +331,73 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                 />
             )}
 
+            {/* Not logged in */}
+            {result?.reason === 'not_logged_in' && (
+                <div style={{
+                    background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)',
+                    borderRadius: '10px', padding: '14px', textAlign: 'center', marginBottom: '4px',
+                }}>
+                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>👤</div>
+                    <div style={{ fontWeight: '700', color: '#94a3b8', fontSize: '13px', marginBottom: '4px' }}>
+                        Not logged in
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.5 }}>
+                        {t('accountHowTo')} <b>promptly.sbs</b> → {t('tokenHintProfile')}
+                    </div>
+                </div>
+            )}
+
+            {/* IP limit reached */}
+            {result?.locked && result?.reason === 'ip_limit_reached' && (
+                <div style={{
+                    background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                    borderRadius: '10px', padding: '14px', textAlign: 'center', marginBottom: '4px',
+                }}>
+                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>🚫</div>
+                    <div style={{ fontWeight: '700', color: '#ef4444', fontSize: '13px', marginBottom: '4px' }}>
+                        Daily IP limit reached
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>
+                        Too many searches from your network today.
+                    </div>
+                    <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer"
+                        style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>
+                        {t('upgradePro')}
+                    </a>
+                </div>
+            )}
+
+            {/* Daily limit reached */}
+            {result?.locked && result?.reason === 'limit_reached' && (
+                <div style={{
+                    background: 'rgba(200,160,80,0.08)', border: '1px solid rgba(200,160,80,0.3)',
+                    borderRadius: '10px', padding: '14px', textAlign: 'center', marginBottom: '4px',
+                }}>
+                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>⏳</div>
+                    <div style={{ fontWeight: '700', color: '#c8a050', fontSize: '13px', marginBottom: '4px' }}>
+                        {result.usedToday}/{result.limit} free searches used today
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>
+                        Upgrade to PRO for unlimited price checks across all tiers and qualities.
+                    </div>
+                    <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer"
+                        style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>
+                        {t('upgradePro')}
+                    </a>
+                </div>
+            )}
+
             {/* PRO lock */}
-            {result?.locked && (
+            {result?.locked && result?.reason !== 'limit_reached' && (
                 <div style={{
                     background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)',
                     borderRadius: '10px', padding: '14px', textAlign: 'center', marginBottom: '4px',
                 }}>
                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>🔒</div>
                     <div style={{ fontWeight: '700', color: '#a855f7', fontSize: '13px', marginBottom: '4px' }}>{t('proLocked')}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>{t('proLockedMsg')}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>
+                        {result.reason === 'pro_required_full' ? t('proRequiredFullMsg') : t('proLockedMsg')}
+                    </div>
                     <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer"
                         style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>
                         {t('upgradePro')}
@@ -380,6 +412,9 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                         <div style={{ fontWeight: '700', fontSize: '13px', color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {result.itemName}
                             {result.tier && <span style={{ marginLeft: '5px', fontSize: '10px', color: '#475569' }}>T{result.tier}{result.enchant ? `.${result.enchant}` : ''}</span>}
+                            {quality > 1 && <span style={{ marginLeft: '5px', fontSize: '10px', color: QUALITY.find(q => q.v === quality)?.color || '#64748b' }}>
+                                {QUALITY.find(q => q.v === quality)?.label}
+                            </span>}
                         </div>
                         {isLoggedIn && (
                             <button onClick={() => setShowLog(l => !l)} style={{
@@ -391,6 +426,25 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                             </button>
                         )}
                     </div>
+
+                    {/* Quality PRO+ upsell — показываем если качество != Normal и нет PRO+ */}
+                    {quality > 1 && !isProPlus && (
+                        <div style={{
+                            background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
+                            borderRadius: '8px', padding: '6px 10px', marginBottom: '7px',
+                            display: 'flex', alignItems: 'center', gap: '7px',
+                        }}>
+                            <span style={{ fontSize: '14px' }}>🔒</span>
+                            <div>
+                                <div style={{ fontSize: '11px', color: '#a855f7', fontWeight: '700' }}>
+                                    {QUALITY.find(q => q.v === quality)?.label} — PRO+
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#64748b', lineHeight: 1.4 }}>
+                                    {t('qualityProPlus') || 'Price monitoring by quality is available in PRO+'}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Best sell */}
                     {bestSell && (

@@ -6,6 +6,7 @@ const fs     = require('fs');
 const https  = require('https');
 const http   = require('http');
 const { execFile } = require('child_process');
+const WebSocket = require('ws');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -15,6 +16,15 @@ const API_BASE = `https://${_h}`;
 
 // HMAC-ключ для подписи отчётов о ценах
 const OVERLAY_REPORT_KEY = ['albion', 'overlay', 'contrib', '2025'].join('-');
+
+// ── Файловый лог для диагностики синка (specs/бухгалтерия) — без него видно
+// только то, что попадает в albiondata-client.log самого агента, а не наш код. ──
+const SYNC_LOG_PATH = path.join(app.getPath('userData'), 'overlay-sync.log');
+function syncLog(...args) {
+    const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}\n`;
+    console.log(...args);
+    try { fs.appendFileSync(SYNC_LOG_PATH, line); } catch {}
+}
 
 // ── Уровень 3: Device Fingerprint ─────────────────────────────────────────────
 function getDeviceFingerprint() {
@@ -115,6 +125,77 @@ let tray       = null;
 let isVisible  = true;
 let agentProc  = null;
 
+// ── Npcap auto-install ────────────────────────────────────────────────────────
+// agent.exe (наш форк albiondata-client) не может перехватывать трафик игры без
+// драйвера Npcap — без него pcap.OpenLive() возвращает ошибку (раньше это роняло
+// весь агент целиком, см. фикс в overlay-agent-v2/client/listener.go). Мы НЕ
+// встраиваем бинарник Npcap в свой инсталлятор — их лицензия требует платный OEM
+// redistribution для этого (nmap.com/npcap → "if you plan on redistributing...").
+// Вместо этого при первом запуске скачиваем ОФИЦИАЛЬНЫЙ инсталлятор напрямую с
+// npcap.com и тихо прогоняем его — так же поступает, например, сам Wireshark.
+// Установка драйвера требует прав администратора — через Start-Process -Verb RunAs
+// Windows покажет один стандартный UAC-запрос при самой первой установке.
+const NPCAP_MARKER_DIR = 'C:\\Windows\\System32\\Npcap';
+
+function downloadFile(url, destPath, redirectsLeft = 5) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(destPath);
+        https.get(url, (res) => {
+            if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                file.close();
+                fs.unlink(destPath, () => {});
+                if (redirectsLeft <= 0) return reject(new Error('too many redirects'));
+                downloadFile(res.headers.location, destPath, redirectsLeft - 1).then(resolve, reject);
+                return;
+            }
+            if (res.statusCode !== 200) {
+                file.close();
+                fs.unlink(destPath, () => {});
+                reject(new Error(`HTTP ${res.statusCode}`));
+                return;
+            }
+            res.pipe(file);
+            file.on('finish', () => file.close(() => resolve()));
+        }).on('error', err => {
+            file.close();
+            fs.unlink(destPath, () => {});
+            reject(err);
+        });
+    });
+}
+
+async function ensureNpcap() {
+    if (fs.existsSync(NPCAP_MARKER_DIR)) {
+        syncLog('[npcap] already installed');
+        return true;
+    }
+    syncLog('[npcap] not found, downloading official installer from npcap.com...');
+    const installerPath = path.join(os.tmpdir(), 'npcap-installer.exe');
+    try {
+        await downloadFile('https://npcap.com/dist/npcap-latest.exe', installerPath);
+    } catch (e) {
+        syncLog('[npcap] download failed:', e.message);
+        return false;
+    }
+    syncLog('[npcap] downloaded, launching silent install (will show one UAC prompt)...');
+    // -Verb RunAs через отдельный powershell — обычный spawn() НЕ триггерит UAC для
+    // процессов с requireAdministrator в манифесте, он просто падает с ERROR_ELEVATION_REQUIRED.
+    const escapedPath = installerPath.replace(/'/g, "''");
+    const psCommand = `try { $p = Start-Process -FilePath '${escapedPath}' -ArgumentList '/S','/winpcap_mode=yes' -Verb RunAs -Wait -PassThru; Write-Output "EXIT:$($p.ExitCode)" } catch { Write-Output "ERROR:$($_.Exception.Message)" }`;
+    const result = await new Promise((resolve) => {
+        execFile('powershell.exe',
+            ['-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psCommand],
+            { timeout: 120000 },
+            (_err, stdout) => resolve((stdout || '').trim())
+        );
+    });
+    syncLog('[npcap] installer result:', result || '(empty)');
+    try { fs.unlinkSync(installerPath); } catch {}
+    const ok = fs.existsSync(NPCAP_MARKER_DIR);
+    syncLog(ok ? '[npcap] install confirmed' : '[npcap] still not detected after install attempt');
+    return ok;
+}
+
 // ── Auto-launch AODP agent ────────────────────────────────────────────────────
 function launchAgent() {
     if (isDev) return; // в dev-режиме агент запускается вручную
@@ -130,15 +211,114 @@ function launchAgent() {
         }
         agentProc = require('child_process').spawn(agentPath, [], {
             detached: false,
-            stdio:    'ignore',
+            stdio:    ['ignore', 'ignore', 'pipe'],
             windowsHide: true,
         });
-        agentProc.on('error', e => console.error('[agent] launch error:', e.message));
-        agentProc.on('exit',  c => console.log('[agent] exited with code', c));
-        console.log('[agent] launched, pid:', agentProc.pid);
+        // Раньше stderr игнорировался целиком — при крашах (например, panic → exit code 2)
+        // причина терялась безвозвратно, было видно только "exited with code 2" без деталей.
+        let stderrBuf = '';
+        agentProc.stderr.on('data', chunk => { stderrBuf += chunk.toString(); });
+        agentProc.on('error', e => syncLog('[agent] launch error:', e.message));
+        agentProc.on('exit',  c => {
+            syncLog('[agent] exited with code', c);
+            if (c !== 0 && stderrBuf.trim()) syncLog('[agent] stderr:', stderrBuf.trim());
+        });
+        syncLog('[agent] launched, pid:', agentProc.pid);
     } catch (e) {
         console.error('[agent] failed to launch:', e.message);
     }
+}
+
+// ── Agent WebSocket: синк specs (Destiny Board) и market-уведомлений (бухгалтерия) ──
+// agent.exe (наш форк albiondata-client) уже поднимает локальный WS на 127.0.0.1:9999/ws
+// и шлёт туда топики "skills" (specs) и "marketnotifications" (продажи/протухшие лоты) —
+// то же самое, что он и так пассивно видит для рыночных цен, просто личные данные игрока.
+let agentWsClient = null;
+let agentWsReconnectTimer = null;
+
+function connectAgentWS() {
+    const saved = readConfig();
+    const wsUrl = saved.agentWS || 'ws://127.0.0.1:9999/ws';
+    syncLog('[agent-ws] connecting to', wsUrl);
+
+    try {
+        agentWsClient = new WebSocket(wsUrl, { headers: { Origin: 'http://localhost:3001' } });
+    } catch (e) {
+        syncLog('[agent-ws] connect() threw:', e.message);
+        scheduleAgentWsReconnect();
+        return;
+    }
+
+    agentWsClient.on('open', () => {
+        syncLog('[agent-ws] connected to', wsUrl);
+    });
+
+    agentWsClient.on('message', (raw) => {
+        let msg;
+        const rawStr = raw.toString();
+        try { msg = JSON.parse(rawStr); } catch (e) { syncLog('[agent-ws] parse failed:', e.message, 'raw=', rawStr.slice(0, 300)); return; }
+        // market_view/location тикают каждую секунду — логируем только то, что нас интересует, не спамим файл
+        if (msg?.type === 'skills' || msg?.type === 'market_notification') {
+            syncLog('[agent-ws] message type=', msg.type, 'raw=', rawStr.slice(0, 300));
+        }
+        handleAgentWsMessage(msg).catch(e => syncLog('[agent-ws] handle error:', e.message));
+    });
+
+    agentWsClient.on('close', () => {
+        syncLog('[agent-ws] closed, reconnecting in 5s');
+        agentWsClient = null;
+        scheduleAgentWsReconnect();
+    });
+
+    // Агент часто ещё не поднялся к моменту первой попытки — это норма, но логируем для диагностики
+    agentWsClient.on('error', (e) => syncLog('[agent-ws] error:', e.message));
+}
+
+function scheduleAgentWsReconnect() {
+    if (agentWsReconnectTimer) return;
+    agentWsReconnectTimer = setTimeout(() => {
+        agentWsReconnectTimer = null;
+        connectAgentWS();
+    }, 5000);
+}
+
+async function handleAgentWsMessage(msg) {
+    const { type, payload } = msg || {};
+    if (!type || !payload) return;
+
+    const { wallet, token } = readConfig();
+    if (!wallet || !token) { syncLog('[agent-ws] skip: not logged in to overlay'); return; }
+
+    if (type === 'skills' && Array.isArray(payload.skills)) {
+        // Наш форк шлёт {id,level,percentNextLevel,fame} (lowercase) — backend ждёт капитализированные ключи lib.Skill
+        const skills = payload.skills.map(s => ({ Id: s.id, Level: s.level, PercentNextLevel: s.percentNextLevel, Fame: s.fame }));
+        syncLog('[agent-ws] sync-skills: sending', skills.length, 'skills');
+        const res = await fetch(`${API_BASE}/api/overlay/sync-skills`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet, token, skills }),
+        }).catch(e => { syncLog('[agent-ws] sync-skills fetch failed:', e.message); return null; });
+        if (res) syncLog('[agent-ws] sync-skills response:', res.status, await res.text().catch(() => ''));
+    } else if (type === 'trade_buy' || type === 'trade_sell') {
+        // Авто-запись покупок/продаж в бухгалтерию — строго по тумблеру в настройках,
+        // это финансовые данные игрока и включается им самим, а не по умолчанию.
+        const { autoLogTrade } = readConfig();
+        if (!autoLogTrade) return;
+
+        const endpoint = type === 'trade_buy' ? '/api/ledger/sync/market-buy' : '/api/ledger/sync/market-sale';
+        const body = type === 'trade_buy'
+            ? { item_id: payload.item_id, price: payload.price, quantity: payload.quantity, city: payload.city, source_id: payload.source_id }
+            : { item_id: payload.item_id, price: payload.price, quantity: payload.quantity, city: payload.city, source_id: payload.source_id, total_after_taxes: payload.total_after_taxes };
+
+        syncLog('[agent-ws]', type, 'raw=', JSON.stringify(payload).slice(0, 200));
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(body),
+        }).catch(e => { syncLog(`[agent-ws] ${type} fetch failed:`, e.message); return null; });
+        if (res) syncLog(`[agent-ws] ${type} response:`, res.status, await res.text().catch(() => ''));
+    }
+    // market_view/location — используются другими частями оверлея, тут не нужны, молча игнорируем.
 }
 
 // ── Overlay window ────────────────────────────────────────────────────────────
@@ -856,9 +1036,14 @@ ipcMain.handle('sign-price-report', async (_, { itemId, city, price, quality }) 
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-    launchAgent();
     createOverlay();
     createTray();
+    // Npcap может докачиваться/доустанавливаться в фоне (только при первом запуске без него) —
+    // окно оверлея уже открыто, агент подключится сам, как только будет готово.
+    ensureNpcap().finally(() => {
+        launchAgent();
+        setTimeout(connectAgentWS, 3000); // даём агенту время поднять локальный WS-сервер
+    });
     globalShortcut.register('CommandOrControl+Shift+A', toggleVisibility);
 
     // Уровень 2: проверка целостности при старте (асинхронно)
@@ -901,4 +1086,6 @@ app.on('will-quit', () => {
     if (agentProc && !agentProc.killed) {
         agentProc.kill();
     }
+    if (agentWsReconnectTimer) clearTimeout(agentWsReconnectTimer);
+    if (agentWsClient) { try { agentWsClient.close(); } catch {} }
 });
