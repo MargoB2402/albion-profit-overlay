@@ -31,8 +31,11 @@ function ProLock({ t }) {
     );
 }
 
+const TIER_FILTER_OPTIONS    = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
+
 // Autocomplete dropdown (reuses same pattern as PriceWidget)
-function SearchDropdown({ query, onSelect, config, t }) {
+function SearchDropdown({ query, onSelect, config, t, tierFilter, enchantFilter }) {
     const [suggestions, setSuggestions] = useState([]);
     const [visible, setVisible]         = useState(false);
     const timer = useRef(null);
@@ -45,7 +48,9 @@ function SearchDropdown({ query, onSelect, config, t }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet  || '';
                 const token  = config.token   || '';
-                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&filterType=GEAR_ONLY&lang=${getLang()}`;
+                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&filterType=GEAR_ONLY&lang=${getLang()}`;
+                if (tierFilter)    url += `&tier=${encodeURIComponent(tierFilter)}`;
+                if (enchantFilter) url += `&enchant=${encodeURIComponent(enchantFilter)}`;
                 const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data = res?.data ?? res;
                 if (Array.isArray(data) && data.length) { setSuggestions(data); setVisible(true); }
@@ -53,7 +58,7 @@ function SearchDropdown({ query, onSelect, config, t }) {
             } catch { setSuggestions([]); setVisible(false); }
         }, 280);
         return () => clearTimeout(timer.current);
-    }, [query, config]);
+    }, [query, config, tierFilter, enchantFilter]);
 
     if (!visible || !suggestions.length) return null;
 
@@ -83,6 +88,7 @@ export default function EnchantWidget() {
     const [query,        setQuery]        = useState('');
     const [selectedItem, setSelectedItem] = useState(null); // { id, name }
     const [dropOpen,     setDropOpen]     = useState(false);
+    const [searchTier,   setSearchTier]   = useState(''); // сужает автокомплит поиска базового предмета
     const [startEnch,    setStartEnch]    = useState('0');
     const [targetEnch,   setTargetEnch]   = useState('1');
     const [loading,      setLoading]      = useState(false);
@@ -234,21 +240,39 @@ export default function EnchantWidget() {
                     onFocus={() => query.length >= 2 && setDropOpen(true)}
                     onBlur={() => setTimeout(() => setDropOpen(false), 150)}
                 />
-                {dropOpen && <SearchDropdown query={query} onSelect={handleSelectItem} config={config} t={t} />}
+                {dropOpen && <SearchDropdown query={query} onSelect={handleSelectItem} config={config} t={t} tierFilter={searchTier} />}
+            </div>
+
+            {/* Search filter: tier — сужает автокомплит */}
+            <div style={{ marginTop: '6px' }}>
+                <select style={{ ...SI.input, colorScheme: 'dark' }} value={searchTier} onChange={e => setSearchTier(e.target.value)}>
+                    <option value="">{t('filterAnyTier') || 'Любой тир'}</option>
+                    {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>T{v}</option>)}
+                </select>
             </div>
 
             {/* Enchant selectors + calc btn */}
             <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', marginTop: '6px' }}>
                 <div style={{ flex: 1 }}>
                     <div style={SI.label}>{t('enchantFrom')}</div>
-                    <select value={startEnch} onChange={e => handleStartChange(e.target.value)} style={{ ...SI.input, colorScheme: 'dark' }}>
+                    <select value={startEnch} onChange={e => handleStartChange(e.target.value)}
+                        onWheel={e => { e.preventDefault(); const opts = ['0','1','2','3']; const i = opts.indexOf(startEnch); handleStartChange(opts[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), opts.length - 1)]); }}
+                        style={{ ...SI.input, colorScheme: 'dark' }}>
                         {['0','1','2','3'].map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>.{v}</option>)}
                     </select>
                 </div>
                 <div style={{ color: '#475569', fontSize: '14px', paddingBottom: '6px' }}>→</div>
                 <div style={{ flex: 1 }}>
                     <div style={SI.label}>{t('enchantTo')}</div>
-                    <select value={targetEnch} onChange={e => { setTargetEnch(e.target.value); setResult(null); }} style={{ ...SI.input, colorScheme: 'dark' }}>
+                    <select value={targetEnch} onChange={e => { setTargetEnch(e.target.value); setResult(null); }}
+                        onWheel={e => {
+                            e.preventDefault();
+                            const opts = ['1','2','3','4'].filter(v => Number(v) > Number(startEnch));
+                            const i = opts.indexOf(targetEnch);
+                            const next = opts[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), opts.length - 1)];
+                            if (next) { setTargetEnch(next); setResult(null); }
+                        }}
+                        style={{ ...SI.input, colorScheme: 'dark' }}>
                         {['1','2','3','4'].filter(v => Number(v) > Number(startEnch)).map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>.{v}</option>)}
                     </select>
                 </div>

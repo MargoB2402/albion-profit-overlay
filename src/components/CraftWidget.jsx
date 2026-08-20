@@ -21,8 +21,12 @@ const CITIES    = ['Thetford', 'Fort Sterling', 'Lymhurst', 'Bridgewatch', 'Mart
 const TO_CITIES = ['Black Market', 'Fort Sterling', 'Thetford', 'Lymhurst', 'Bridgewatch', 'Martlock', 'Caerleon', 'Brecilien'];
 const RRR_PRESETS = [{ label: '15.2%', v: 15.2 }, { label: '24.8%', v: 24.8 }, { label: '43.5%⚡', v: 43.5 }, { label: '47.9%⚡', v: 47.9 }];
 
+// Общие пресеты для фильтров тир/зачар в поиске предметов (все виджеты с поиском)
+const TIER_FILTER_OPTIONS    = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
+
 // Autocomplete поиск предметов
-function SearchDropdown({ query, onSelect, config }) {
+function SearchDropdown({ query, onSelect, config, tierFilter, enchantFilter }) {
     const [suggestions, setSuggestions] = useState([]);
     const [visible, setVisible]         = useState(false);
     const timer = useRef(null);
@@ -35,7 +39,9 @@ function SearchDropdown({ query, onSelect, config }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet  || '';
                 const token  = config.token   || '';
-                const url    = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=7&lang=${getLang()}`;
+                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=7&lang=${getLang()}`;
+                if (tierFilter)    url += `&tier=${encodeURIComponent(tierFilter)}`;
+                if (enchantFilter) url += `&enchant=${encodeURIComponent(enchantFilter)}`;
                 const res    = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data   = res?.data ?? res;
                 if (Array.isArray(data) && data.length) { setSuggestions(data); setVisible(true); }
@@ -43,7 +49,7 @@ function SearchDropdown({ query, onSelect, config }) {
             } catch { setSuggestions([]); setVisible(false); }
         }, 300);
         return () => clearTimeout(timer.current);
-    }, [query, config]);
+    }, [query, config, tierFilter, enchantFilter]);
 
     if (!visible || !suggestions.length) return null;
     return (
@@ -90,6 +96,8 @@ export default function CraftWidget({ city }) {
     // Search state
     const [searchQuery,  setSearchQuery]  = useState('');
     const [searchOpen,   setSearchOpen]   = useState(false);
+    const [searchTier,    setSearchTier]    = useState('');
+    const [searchEnchant, setSearchEnchant] = useState('');
     const searchRef = useRef(null);
     useEffect(() => {
         const fn = e => { if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false); };
@@ -106,6 +114,7 @@ export default function CraftWidget({ city }) {
     const [copied,      setCopied]      = useState(null);
     const [ledgerLoading, setLedgerLoading] = useState(false);
     const [ledgerDone,    setLedgerDone]    = useState(false);
+    const [recipeError,   setRecipeError]   = useState(null);
 
     const loadTop5 = useCallback(async () => {
         setLoading(true);
@@ -117,6 +126,7 @@ export default function CraftWidget({ city }) {
     const openRecipe = useCallback(async (row) => {
         setSelected(row);
         setRecipe(null);
+        setRecipeError(null);
         setRecLoading(true);
         setLedgerDone(false);
         const data = await fetchCraftBreakdown({ item: row.item, city: craftCity, region: config.region || 'europe' });
@@ -125,9 +135,13 @@ export default function CraftWidget({ city }) {
             // Как в RecipeDrawer сайта: начальное qty = yield рецепта (1 крафт = yield порций)
             setQty(data.yield || 1);
             setRrr(data.rrr || 15.2);
+        } else {
+            // Раньше тут просто оставался пустой экран без единого объяснения — пользователь
+            // не мог понять, баг это или у предмета правда нет рецепта крафта на этом тире.
+            setRecipeError(data?.error || t('craftNoRecipeError') || 'Нет рецепта крафта для этого предмета (возможно, недоступен в этом тире/зачаре).');
         }
         setRecLoading(false);
-    }, [fetchCraftBreakdown, craftCity, config.region]);
+    }, [fetchCraftBreakdown, craftCity, config.region, t]);
 
     const copyName = (name, id) => {
         navigator.clipboard.writeText(name).catch(() => {});
@@ -179,7 +193,7 @@ export default function CraftWidget({ city }) {
         return (
             <div style={SI.wrap}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                    <button onClick={() => { setSelected(null); setRecipe(null); }} style={SI.ghost}>{t('craftBack')}</button>
+                    <button onClick={() => { setSelected(null); setRecipe(null); setRecipeError(null); }} style={SI.ghost}>{t('craftBack')}</button>
                     <span style={{ fontSize: '12px', fontWeight: '700', color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {selected.name || selected.item}
                 </span>
@@ -212,6 +226,12 @@ export default function CraftWidget({ city }) {
                 </div>
 
                 {recLoading && <div style={{ textAlign: 'center', color: '#475569', padding: '20px', fontSize: '12px' }}>{t('loading')}</div>}
+
+                {!recLoading && recipeError && (
+                    <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '9px', padding: '12px', margin: '10px 0', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#ef4444', lineHeight: 1.5 }}>{recipeError}</div>
+                    </div>
+                )}
 
                 {recipe && (
                     <>
@@ -298,6 +318,8 @@ export default function CraftWidget({ city }) {
                     <SearchDropdown
                         query={searchQuery}
                         config={config}
+                        tierFilter={searchTier}
+                        enchantFilter={searchEnchant}
                         onSelect={item => {
                             setSearchQuery(item.name);
                             setSearchOpen(false);
@@ -305,6 +327,18 @@ export default function CraftWidget({ city }) {
                         }}
                     />
                 )}
+            </div>
+
+            {/* Search filters: tier/enchant — сужают автокомплит, меньше перебора по базе */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                <select style={{ ...SI.input, flex: 1 }} value={searchTier} onChange={e => setSearchTier(e.target.value)}>
+                    <option value="">{t('filterAnyTier') || 'Любой тир'}</option>
+                    {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v}>T{v}</option>)}
+                </select>
+                <select style={{ ...SI.input, flex: 1 }} value={searchEnchant} onChange={e => setSearchEnchant(e.target.value)}>
+                    <option value="">{t('filterAnyEnchant') || 'Любой зачар'}</option>
+                    {ENCHANT_FILTER_OPTIONS.map(v => <option key={v} value={v}>.{v}</option>)}
+                </select>
             </div>
 
             {/* Divider */}
@@ -318,13 +352,17 @@ export default function CraftWidget({ city }) {
             <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
                 <div style={{ flex: 1 }}>
                     <div style={SI.label}>{t('craftCity')}</div>
-                    <select value={craftCity} onChange={e => setCraftCity(e.target.value)} style={{ ...SI.input, colorScheme: 'dark' }}>
+                    <select value={craftCity} onChange={e => setCraftCity(e.target.value)}
+                        onWheel={e => { e.preventDefault(); const i = CITIES.indexOf(craftCity); setCraftCity(CITIES[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), CITIES.length - 1)]); }}
+                        style={{ ...SI.input, colorScheme: 'dark' }}>
                         {CITIES.map(c => <option key={c} value={c} style={{ background: '#1e2030', color: '#e2e8f0' }}>{c}</option>)}
                     </select>
                 </div>
                 <div style={{ flex: 1 }}>
                     <div style={SI.label}>{t('craftToCity')}</div>
-                    <select value={toCity} onChange={e => setToCity(e.target.value)} style={{ ...SI.input, colorScheme: 'dark' }}>
+                    <select value={toCity} onChange={e => setToCity(e.target.value)}
+                        onWheel={e => { e.preventDefault(); const i = TO_CITIES.indexOf(toCity); setToCity(TO_CITIES[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), TO_CITIES.length - 1)]); }}
+                        style={{ ...SI.input, colorScheme: 'dark' }}>
                         {TO_CITIES.map(c => <option key={c} value={c} style={{ background: '#1e2030', color: '#e2e8f0' }}>{c}</option>)}
                     </select>
                 </div>

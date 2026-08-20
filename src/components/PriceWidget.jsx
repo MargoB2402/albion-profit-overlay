@@ -17,8 +17,11 @@ const SI = {
     ghost: { background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', color: '#94a3b8', cursor: 'pointer', fontSize: '12px', padding: '7px 10px' },
 };
 
+const TIER_FILTER_OPTIONS    = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
+
 // Autocomplete dropdown component
-function SearchDropdown({ query, onSelect, apiFetch, config, t }) {
+function SearchDropdown({ query, onSelect, apiFetch, config, t, tierFilter, enchantFilter }) {
     const [suggestions, setSuggestions] = useState([]);
     const [visible, setVisible] = useState(false);
     const timerRef = useRef(null);
@@ -31,7 +34,9 @@ function SearchDropdown({ query, onSelect, apiFetch, config, t }) {
                 const base   = config.apiBase || 'https://promptly.sbs';
                 const wallet = config.wallet || '';
                 const token  = config.token  || '';
-                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&lang=${getLang()}`;
+                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&lang=${getLang()}`;
+                if (tierFilter)    url += `&tier=${encodeURIComponent(tierFilter)}`;
+                if (enchantFilter) url += `&enchant=${encodeURIComponent(enchantFilter)}`;
                 const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data = res?.data ?? res;
                 if (Array.isArray(data) && data.length > 0) { setSuggestions(data); setVisible(true); }
@@ -39,7 +44,7 @@ function SearchDropdown({ query, onSelect, apiFetch, config, t }) {
             } catch { setSuggestions([]); setVisible(false); }
         }, 280);
         return () => clearTimeout(timerRef.current);
-    }, [query, config]);
+    }, [query, config, tierFilter, enchantFilter]);
 
     if (!visible || !suggestions.length) return null;
 
@@ -153,6 +158,8 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
     const marketCityRef = useRef(null); // синхронная копия для использования в callback-ах
 
     const [query,      setQuery]      = useState('');
+    const [searchTier,    setSearchTier]    = useState('');
+    const [searchEnchant, setSearchEnchant] = useState('');
     const [result,     setResult]     = useState(null);
     const [loading,    setLoading]    = useState(false);
     const [quality,    setQuality]    = useState(1); // качество из агента (market_view)
@@ -312,12 +319,26 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                             onSelect={handleSelect}
                             config={config}
                             t={t}
+                            tierFilter={searchTier}
+                            enchantFilter={searchEnchant}
                         />
                     )}
                 </div>
                 <button style={SI.btn} onClick={() => { setDropdownOpen(false); doSearch(query, quality); }} disabled={loading}>
                     {loading ? '…' : '🔍'}
                 </button>
+            </div>
+
+            {/* Search filters: tier/enchant — сужают автокомплит */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                <select style={{ ...SI.input, flex: 1 }} value={searchTier} onChange={e => setSearchTier(e.target.value)}>
+                    <option value="">{t('filterAnyTier') || 'Любой тир'}</option>
+                    {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v}>T{v}</option>)}
+                </select>
+                <select style={{ ...SI.input, flex: 1 }} value={searchEnchant} onChange={e => setSearchEnchant(e.target.value)}>
+                    <option value="">{t('filterAnyEnchant') || 'Любой зачар'}</option>
+                    {ENCHANT_FILTER_OPTIONS.map(v => <option key={v} value={v}>.{v}</option>)}
+                </select>
             </div>
 
             {/* Quick log panel */}

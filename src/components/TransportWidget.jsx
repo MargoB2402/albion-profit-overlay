@@ -5,6 +5,8 @@ import { useI18n, getLang } from '../hooks/useI18n';
 const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(Math.round(n));
 
 const CITIES = ['Thetford', 'Fort Sterling', 'Lymhurst', 'Bridgewatch', 'Martlock', 'Caerleon', 'Brecilien'];
+const TIER_FILTER_OPTIONS    = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
 
 const S = {
     wrap:   { padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 },
@@ -74,6 +76,8 @@ export default function TransportWidget({ city }) {
     const [suggestions, setSuggestions] = useState([]);
     const [showSug,     setShowSug]    = useState(false);
     const [selectedId,  setSelectedId] = useState('');
+    const [searchTier,    setSearchTier]    = useState('');
+    const [searchEnchant, setSearchEnchant] = useState('');
     const sugTimer = useRef(null);
     const [from,    setFrom]    = useState(city !== 'unknown' ? city : 'Thetford');
     const [to,      setTo]      = useState('Caerleon');
@@ -91,8 +95,7 @@ export default function TransportWidget({ city }) {
         if (city && city !== 'unknown') setFrom(city);
     }, [city]);
 
-    const handleItemInput = (q) => {
-        setItem(q); setSelectedId(''); setResult(null);
+    const runItemSearch = (q, tierF, enchantF) => {
         clearTimeout(sugTimer.current);
         if (q.trim().length < 2) { setSuggestions([]); setShowSug(false); return; }
         sugTimer.current = setTimeout(async () => {
@@ -100,13 +103,25 @@ export default function TransportWidget({ city }) {
                 const base = config.apiBase || 'https://promptly.sbs';
                 const { wallet, token } = config;
                 if (!wallet || !token) return;
-                const url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=7&lang=${getLang()}`;
+                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=7&lang=${getLang()}`;
+                if (tierF)    url += `&tier=${encodeURIComponent(tierF)}`;
+                if (enchantF) url += `&enchant=${encodeURIComponent(enchantF)}`;
                 const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
                 const data = res?.data ?? res;
                 if (Array.isArray(data) && data.length) { setSuggestions(data); setShowSug(true); }
                 else { setSuggestions([]); setShowSug(false); }
             } catch {}
         }, 250);
+    };
+
+    const handleItemInput = (q) => {
+        setItem(q); setSelectedId(''); setResult(null);
+        runItemSearch(q, searchTier, searchEnchant);
+    };
+
+    const handleFilterChange = (tierF, enchantF) => {
+        setSearchTier(tierF); setSearchEnchant(enchantF);
+        if (item.trim().length >= 2) runItemSearch(item, tierF, enchantF);
     };
 
     const selectSuggestion = (s) => {
@@ -214,6 +229,18 @@ export default function TransportWidget({ city }) {
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    {/* Search filters: tier/enchant — сужают автокомплит */}
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                        <select style={{ ...S.select, flex: 1 }} value={searchTier} onChange={e => handleFilterChange(e.target.value, searchEnchant)}>
+                            <option value="">{t('filterAnyTier') || 'Любой тир'}</option>
+                            {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v}>T{v}</option>)}
+                        </select>
+                        <select style={{ ...S.select, flex: 1 }} value={searchEnchant} onChange={e => handleFilterChange(searchTier, e.target.value)}>
+                            <option value="">{t('filterAnyEnchant') || 'Любой зачар'}</option>
+                            {ENCHANT_FILTER_OPTIONS.map(v => <option key={v} value={v}>.{v}</option>)}
+                        </select>
                     </div>
                     <button style={S.btn} onClick={calculate} disabled={loading}>
                         {loading ? t('loading') : t('calcBtn')}
