@@ -5,6 +5,8 @@ import CraftWidget from './components/CraftWidget';
 import EnchantWidget from './components/EnchantWidget';
 import SplitWidget from './components/SplitWidget';
 import AlertsWidget from './components/AlertsWidget';
+import FavoritesWidget from './components/FavoritesWidget';
+import RelistWidget from './components/RelistWidget';
 import TradeNotification from './components/TradeNotification';
 import Settings from './components/Settings';
 import { useAgent } from './hooks/useAgent';
@@ -18,9 +20,11 @@ const TABS = [
     { id: 'enchant',   icon: '✦' },
     { id: 'split',     icon: '÷' },
     { id: 'alerts',    icon: '◆' },
+    { id: 'favorites', icon: '★' },
+    { id: 'relist',    icon: '🏷' },
 ];
 
-const TAB_KEYS = { price: 'tabPrice', transport: 'tabTransport', craft: 'tabCraft', enchant: 'tabEnchant', split: 'tabSplit', alerts: 'tabAlerts' };
+const TAB_KEYS = { price: 'tabPrice', transport: 'tabTransport', craft: 'tabCraft', enchant: 'tabEnchant', split: 'tabSplit', alerts: 'tabAlerts', favorites: 'tabFavorites', relist: 'tabRelist' };
 
 export default function App() {
     const [tab, setTab]                   = useState('price');
@@ -289,6 +293,8 @@ export default function App() {
                         <div style={{ display: tab === 'enchant'   ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}><EnchantWidget /></div>
                         <div style={{ display: tab === 'split'     ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}><SplitWidget     city={city} /></div>
                         <div style={{ display: tab === 'alerts'    ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}><AlertsWidget /></div>
+                        <div style={{ display: tab === 'favorites' ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}><FavoritesWidget /></div>
+                        <div style={{ display: tab === 'relist'    ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0 }}><RelistWidget /></div>
                     </>
                 )}
             </div>

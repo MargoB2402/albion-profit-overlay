@@ -133,6 +133,36 @@ function useApiState() {
         } catch { return []; }
     }, [config]);
 
+    // Избранное с сайта. lang нужен, чтобы имя можно было вставить в поиск аукциона
+    // на языке игры: в базе лежит то имя, что было в интерфейсе при добавлении.
+    const fetchFavorites = useCallback(async () => {
+        const base   = config.apiBase || API_BASE;
+        const wallet = config.wallet;
+        const token  = config.token;
+        if (!wallet || !token) return [];
+        try {
+            const params = new URLSearchParams({
+                wallet, token, region: config.region || 'europe', lang: getLang(),
+            });
+            const data = await apiFetch(`${base}/api/favorites?${params}`);
+            return Array.isArray(data?.items) ? data.items : [];
+        } catch { return []; }
+    }, [config]);
+
+    // Перебитые лоты: где наша цена выше самой низкой на рынке в том же городе.
+    // Ходит в Бухгалтерию (порт 3005), авторизация там по Bearer, а не по query.
+    const fetchOutbid = useCallback(async () => {
+        const base   = config.apiBase || API_BASE;
+        const token  = config.token;
+        if (!config.wallet || !token) return { success: false };
+        try {
+            const params = new URLSearchParams({ lang: getLang(), region: config.region || 'europe' });
+            return await apiFetch(`${base}/api/ledger/overlay/outbid?${params}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+        } catch { return { success: false }; }
+    }, [config]);
+
     // Топ-5 предметов для транспортного маршрута
     const fetchTransportTop = useCallback(async ({ from, to, tax = 10.5, safetyFilter = false }) => {
         const base   = config.apiBase || API_BASE;
@@ -299,7 +329,7 @@ function useApiState() {
         setIsAdmin(false);
     }, [config]);
 
-    return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
+    return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, fetchFavorites, fetchOutbid, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
 }
 
 const ApiContext = createContext(null);
