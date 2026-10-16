@@ -1,6 +1,7 @@
+import SearchDropdown from './ItemSearchDropdown';
 import React, { useState, useCallback, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
-import { useI18n, getLang } from '../hooks/useI18n';
+import { useI18n } from '../hooks/useI18n';
 
 const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(Math.round(n));
 
@@ -73,12 +74,10 @@ export default function TransportWidget({ city }) {
     const { t } = useI18n();
 
     const [item,        setItem]       = useState('');
-    const [suggestions, setSuggestions] = useState([]);
     const [showSug,     setShowSug]    = useState(false);
     const [selectedId,  setSelectedId] = useState('');
     const [searchTier,    setSearchTier]    = useState('');
     const [searchEnchant, setSearchEnchant] = useState('');
-    const sugTimer = useRef(null);
     const [from,    setFrom]    = useState(city !== 'unknown' ? city : 'Thetford');
     const [to,      setTo]      = useState('Caerleon');
     const [tax,     setTax]     = useState(10.5);
@@ -95,44 +94,21 @@ export default function TransportWidget({ city }) {
         if (city && city !== 'unknown') setFrom(city);
     }, [city]);
 
-    const runItemSearch = (q, tierF, enchantF) => {
-        clearTimeout(sugTimer.current);
-        if (q.trim().length < 2) { setSuggestions([]); setShowSug(false); return; }
-        sugTimer.current = setTimeout(async () => {
-            try {
-                const base = config.apiBase || 'https://promptly.sbs';
-                const { wallet, token } = config;
-                if (!wallet || !token) return;
-                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=7&lang=${getLang()}`;
-                if (tierF)    url += `&tier=${encodeURIComponent(tierF)}`;
-                if (enchantF) url += `&enchant=${encodeURIComponent(enchantF)}`;
-                const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
-                const data = res?.data ?? res;
-                if (Array.isArray(data) && data.length) { setSuggestions(data); setShowSug(true); }
-                else { setSuggestions([]); setShowSug(false); }
-            } catch {}
-        }, 250);
-    };
-
     const handleItemInput = (q) => {
-        setItem(q); setSelectedId(''); setResult(null);
-        runItemSearch(q, searchTier, searchEnchant);
+        setItem(q); setSelectedId(''); setResult(null); setShowSug(true);
     };
-
     const handleFilterChange = (tierF, enchantF) => {
-        setSearchTier(tierF); setSearchEnchant(enchantF);
-        if (item.trim().length >= 2) runItemSearch(item, tierF, enchantF);
+        setSearchTier(tierF); setSearchEnchant(enchantF); setShowSug(true);
     };
-
     const selectSuggestion = (s) => {
-        setItem(s.name); setSelectedId(s.id); setSuggestions([]); setShowSug(false);
+        setItem(s.name); setSelectedId(s.id); setShowSug(false); setResult(null);
     };
 
     const calculate = async () => {
         if (!item.trim()) return;
         setLoading(true);
         try {
-            const data = await fetchPrice(item);
+            const data = await fetchPrice(selectedId || item);
             if (!data?.success) { setResult({ error: t('noResults') }); return; }
             const fromPrice = data.prices.find(p => p.city === from)?.sell || 0;
             const toPrice   = data.prices.find(p => p.city === to)?.sell   || 0;
@@ -212,23 +188,9 @@ export default function TransportWidget({ city }) {
                             onChange={e => handleItemInput(e.target.value)}
                             placeholder={t('searchPlaceholder')}
                             onKeyDown={e => e.key === 'Enter' && calculate()}
+                            onFocus={() => item.trim().length >= 2 && setShowSug(true)}
                             onBlur={() => setTimeout(() => setShowSug(false), 150)} />
-                        {showSug && suggestions.length > 0 && (
-                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                                background: 'rgba(12,14,26,0.98)', border: '1px solid rgba(255,255,255,0.12)',
-                                borderRadius: '8px', marginTop: '2px', overflow: 'hidden' }}>
-                                {suggestions.map(s => (
-                                    <div key={s.id} onMouseDown={() => selectSuggestion(s)}
-                                        style={{ padding: '7px 10px', fontSize: '12px', cursor: 'pointer',
-                                            color: '#e2e8f0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,160,80,0.1)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                        {s.name}
-                                        <span style={{ fontSize: '10px', color: '#475569', marginLeft: '5px' }}>{s.id}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        {showSug && <SearchDropdown query={item} config={config} tierFilter={searchTier} enchantFilter={searchEnchant} onSelect={selectSuggestion} />}
                     </div>
 
                     {/* Search filters: tier/enchant — сужают автокомплит */}

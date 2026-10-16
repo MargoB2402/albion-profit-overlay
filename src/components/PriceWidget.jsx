@@ -1,7 +1,8 @@
+import SearchDropdown from './ItemSearchDropdown';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useOCR } from '../hooks/useOCR';
-import { useI18n, getLang } from '../hooks/useI18n';
+import { useI18n } from '../hooks/useI18n';
 
 const fmt = n => n >= 1_000_000
     ? (n / 1_000_000).toFixed(2) + 'M'
@@ -21,63 +22,6 @@ const TIER_FILTER_OPTIONS    = ['1', '2', '3', '4', '5', '6', '7', '8'];
 const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
 
 // Autocomplete dropdown component
-function SearchDropdown({ query, onSelect, apiFetch, config, t, tierFilter, enchantFilter }) {
-    const [suggestions, setSuggestions] = useState([]);
-    const [visible, setVisible] = useState(false);
-    const timerRef = useRef(null);
-
-    useEffect(() => {
-        if (!query || query.length < 2) { setSuggestions([]); setVisible(false); return; }
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(async () => {
-            try {
-                const base   = config.apiBase || 'https://promptly.sbs';
-                const wallet = config.wallet || '';
-                const token  = config.token  || '';
-                let url = `${base}/api/overlay/item-search?wallet=${encodeURIComponent(wallet)}&token=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}&limit=6&lang=${getLang()}`;
-                if (tierFilter)    url += `&tier=${encodeURIComponent(tierFilter)}`;
-                if (enchantFilter) url += `&enchant=${encodeURIComponent(enchantFilter)}`;
-                const res = await (window.electron?.apiFetch ? window.electron.apiFetch({ url }) : fetch(url).then(r => r.json()));
-                const data = res?.data ?? res;
-                if (Array.isArray(data) && data.length > 0) { setSuggestions(data); setVisible(true); }
-                else { setSuggestions([]); setVisible(false); }
-            } catch { setSuggestions([]); setVisible(false); }
-        }, 280);
-        return () => clearTimeout(timerRef.current);
-    }, [query, config, tierFilter, enchantFilter]);
-
-    if (!visible || !suggestions.length) return null;
-
-    return (
-        <div style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-            background: 'rgba(12,14,26,0.98)', border: '1px solid rgba(200,160,80,0.25)',
-            borderRadius: '8px', marginTop: '2px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            overflow: 'hidden',
-        }}>
-            {suggestions.map((s, i) => (
-                <div key={s.id} onMouseDown={(e) => { e.preventDefault(); onSelect(s); setVisible(false); }}
-                    style={{
-                        padding: '7px 10px', cursor: 'pointer', fontSize: '12px',
-                        borderBottom: i < suggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,160,80,0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                    <span style={{ color: '#e2e8f0' }}>
-                        {s.name}
-                        {s.id?.match(/^T(\d+)/) && <span style={{ color: '#475569', marginLeft: '4px', fontSize: '10px' }}>T{s.id.match(/^T(\d+)/)[1]}</span>}
-                        {s.id?.match(/@([1-4])$/) && <span style={{ color: '#c8a050', marginLeft: '3px' }}>.{s.id.match(/@([1-4])$/)[1]}</span>}
-                    </span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 // Quick buy log panel
 const QUALITY = [
     { v: 1, short: 'N', label: 'Normal',      color: '#64748b' },
