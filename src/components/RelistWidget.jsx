@@ -42,7 +42,7 @@ export default function RelistWidget() {
 
     if (!isLoggedIn) {
         return (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#475569', flex: 1 }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#a39478', flex: 1 }}>
                 <div style={{ fontSize: '30px', marginBottom: '8px' }}>🏷</div>
                 <div style={{ fontSize: '12px', lineHeight: 1.5 }}>{t('relistLogin')}</div>
             </div>
@@ -51,7 +51,7 @@ export default function RelistWidget() {
 
     if (denied || (!loading && !isProPlus && items.length === 0)) {
         return (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#475569', flex: 1 }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#a39478', flex: 1 }}>
                 <div style={{ fontSize: '30px', marginBottom: '8px' }}>👑</div>
                 <div style={{ fontSize: '12px', lineHeight: 1.5, marginBottom: '10px' }}>{t('relistProPlus')}</div>
                 <a href="https://promptly.sbs/pricing" target="_blank" rel="noreferrer"
@@ -72,17 +72,17 @@ export default function RelistWidget() {
     return (
         <div style={{ padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#475569' }}>{t('relistOutbid')}: {items.length}</span>
+                <span style={{ fontSize: '11px', color: '#a39478' }}>{t('relistOutbid')}: {items.length}</span>
                 <button onClick={load} style={{
                     background: 'none', border: 'none', cursor: 'pointer',
                     fontSize: '11px', color: '#c8a050', fontWeight: '600', padding: 0,
                 }}>{t('relistRefresh')}</button>
             </div>
 
-            {loading && <div style={{ color: '#475569', fontSize: '11px' }}>{t('relistLoading')}</div>}
+            {loading && <div style={{ color: '#a39478', fontSize: '11px' }}>{t('relistLoading')}</div>}
 
             {!loading && items.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#334155', padding: '20px 0' }}>
+                <div style={{ textAlign: 'center', color: '#8a7d65', padding: '20px 0' }}>
                     <div style={{ fontSize: '26px', marginBottom: '6px' }}>✓</div>
                     <div style={{ fontSize: '11px' }}>{t('relistEmpty')}</div>
                 </div>
@@ -96,7 +96,7 @@ export default function RelistWidget() {
                         padding: '3px 2px', borderBottom: '1px solid rgba(200,160,80,0.2)', marginBottom: '5px',
                     }}>
                         <span>{city}</span>
-                        <span style={{ color: '#475569', fontWeight: '600' }}>{byCity[city].length}</span>
+                        <span style={{ color: '#a39478', fontWeight: '600' }}>{byCity[city].length}</span>
                     </div>
 
                     {byCity[city].map((it, i) => {
@@ -109,10 +109,10 @@ export default function RelistWidget() {
                                 display: 'flex', alignItems: 'center', gap: '8px',
                             }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: '600', fontSize: '12px', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontWeight: '600', fontSize: '12px', color: '#f0e8d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {it.name}{it.quality > 1 ? ` · Q${it.quality}` : ''}{it.qty ? ` · ×${it.qty}` : ''}
                                     </div>
-                                    <div style={{ fontSize: '10px', color: '#475569' }}>
+                                    <div style={{ fontSize: '10px', color: '#a39478' }}>
                                         <span style={{ color: '#ef4444' }}>{fmt(it.myPrice)}</span>
                                         {' → '}
                                         <span style={{ color: '#22c55e' }}>{fmt(it.marketLowest)}</span>

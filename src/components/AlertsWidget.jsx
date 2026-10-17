@@ -23,7 +23,7 @@ export default function AlertsWidget() {
 
     if (!isLoggedIn) {
         return (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#475569', flex: 1 }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#a39478', flex: 1 }}>
                 <div style={{ fontSize: '30px', marginBottom: '8px' }}>🔔</div>
                 <div style={{ fontSize: '12px', lineHeight: 1.5 }}>{t('alertsLogin')}</div>
             </div>
@@ -35,17 +35,17 @@ export default function AlertsWidget() {
     return (
         <div style={{ padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#475569' }}>{t('alertsActive')}: {active.length} / 20</span>
+                <span style={{ fontSize: '11px', color: '#a39478' }}>{t('alertsActive')}: {active.length} / 20</span>
                 <a href="https://promptly.sbs/?tab=alerts" target="_blank" rel="noreferrer"
                     style={{ fontSize: '11px', color: '#c8a050', textDecoration: 'none', fontWeight: '600' }}>
                     {t('alertsAdd')}
                 </a>
             </div>
 
-            {loading && <div style={{ color: '#475569', fontSize: '11px' }}>{t('alertsLoading')}</div>}
+            {loading && <div style={{ color: '#a39478', fontSize: '11px' }}>{t('alertsLoading')}</div>}
 
             {!loading && active.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#334155', padding: '20px 0' }}>
+                <div style={{ textAlign: 'center', color: '#8a7d65', padding: '20px 0' }}>
                     <div style={{ fontSize: '26px', marginBottom: '6px' }}>🔕</div>
                     <div style={{ fontSize: '11px' }}>{t('alertsNone')}</div>
                 </div>
@@ -57,10 +57,10 @@ export default function AlertsWidget() {
                     border: '1px solid rgba(255,255,255,0.07)',
                     borderRadius: '8px', padding: '8px 10px', marginBottom: '5px',
                 }}>
-                    <div style={{ fontWeight: '600', fontSize: '12px', marginBottom: '3px', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontWeight: '600', fontSize: '12px', marginBottom: '3px', color: '#f0e8d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {alert.item_name}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#475569', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '10px', color: '#a39478', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{ color: alert.condition === 'lt' ? '#ef4444' : '#22c55e' }}>
                             {alert.condition === 'lt' ? '📉 <' : '📈 >'} {fmt(alert.target_price)}
                         </span>

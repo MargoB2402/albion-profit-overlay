@@ -10,12 +10,12 @@ const fmt = n =>
 
 const SI = {
     wrap:  { padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 },
-    label: { fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '8px' },
-    input: { width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', color: '#e2e8f0', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
+    label: { fontSize: '10px', color: '#a39478', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '8px' },
+    input: { width: '100%', padding: '6px 8px', background: 'rgba(200,160,80,0.06)', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '7px', color: '#f0e8d4', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
     btn:   { padding: '6px 12px', background: '#c8a050', color: '#000', border: 'none', borderRadius: '7px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' },
-    ghost: { background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '7px', color: '#94a3b8', cursor: 'pointer', fontSize: '11px', padding: '4px 8px' },
-    row:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '12px' },
-    sec:   { fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '10px' },
+    ghost: { background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '7px', color: '#c6b898', cursor: 'pointer', fontSize: '11px', padding: '4px 8px' },
+    row:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(200,160,80,0.10)', fontSize: '12px' },
+    sec:   { fontSize: '10px', color: '#a39478', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '10px' },
 };
 
 const RES_ORDER = ['rune', 'soul', 'relic', 'shard'];
@@ -26,7 +26,7 @@ function ProLock({ t }) {
         <div style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)', borderRadius: '10px', padding: '14px', textAlign: 'center', margin: '16px 0' }}>
             <div style={{ fontSize: '20px', marginBottom: '6px' }}>🔒</div>
             <div style={{ fontWeight: '700', color: '#a855f7', fontSize: '13px', marginBottom: '4px' }}>{t('enchantProLocked')}</div>
-            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>{t('enchantProMsg')}</div>
+            <div style={{ fontSize: '11px', color: '#b4a286', marginBottom: '10px', lineHeight: 1.5 }}>{t('enchantProMsg')}</div>
             <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>{t('upgradePro')}</a>
         </div>
     );
@@ -202,7 +202,7 @@ export default function EnchantWidget() {
             <div style={{ marginTop: '6px' }}>
                 <select style={{ ...SI.input, colorScheme: 'dark' }} value={searchTier} onChange={e => setSearchTier(e.target.value)}>
                     <option value="">{t('filterAnyTier') || 'Любой тир'}</option>
-                    {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>T{v}</option>)}
+                    {TIER_FILTER_OPTIONS.map(v => <option key={v} value={v} style={{ background: '#211b11', color: '#f0e8d4' }}>T{v}</option>)}
                 </select>
             </div>
 
@@ -213,10 +213,10 @@ export default function EnchantWidget() {
                     <select value={startEnch} onChange={e => handleStartChange(e.target.value)}
                         onWheel={e => { e.preventDefault(); const opts = ['0','1','2','3']; const i = opts.indexOf(startEnch); handleStartChange(opts[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), opts.length - 1)]); }}
                         style={{ ...SI.input, colorScheme: 'dark' }}>
-                        {['0','1','2','3'].map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>.{v}</option>)}
+                        {['0','1','2','3'].map(v => <option key={v} value={v} style={{ background: '#211b11', color: '#f0e8d4' }}>.{v}</option>)}
                     </select>
                 </div>
-                <div style={{ color: '#475569', fontSize: '14px', paddingBottom: '6px' }}>→</div>
+                <div style={{ color: '#a39478', fontSize: '14px', paddingBottom: '6px' }}>→</div>
                 <div style={{ flex: 1 }}>
                     <div style={SI.label}>{t('enchantTo')}</div>
                     <select value={targetEnch} onChange={e => { setTargetEnch(e.target.value); setResult(null); }}
@@ -228,7 +228,7 @@ export default function EnchantWidget() {
                             if (next) { setTargetEnch(next); setResult(null); }
                         }}
                         style={{ ...SI.input, colorScheme: 'dark' }}>
-                        {['1','2','3','4'].filter(v => Number(v) > Number(startEnch)).map(v => <option key={v} value={v} style={{ background: '#1e2030', color: '#e2e8f0' }}>.{v}</option>)}
+                        {['1','2','3','4'].filter(v => Number(v) > Number(startEnch)).map(v => <option key={v} value={v} style={{ background: '#211b11', color: '#f0e8d4' }}>.{v}</option>)}
                     </select>
                 </div>
                 <button onClick={calculate} disabled={!selectedItem || loading} style={{ ...SI.btn, padding: '6px 10px', alignSelf: 'flex-end', opacity: (!selectedItem || loading) ? 0.5 : 1 }}>
@@ -244,12 +244,12 @@ export default function EnchantWidget() {
                         <div style={{ fontSize: '10px', color: '#22c55e', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{t('enchantBestProfit')}</div>
                         <div style={{ fontSize: '16px', fontWeight: '900', color: '#22c55e', marginBottom: '6px' }}>{fmt(result.turboProfit)}</div>
 
-                        <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span>{t('enchantBuyIn')}: <span style={{ color: '#e2e8f0' }}>{result.bestBuyBase.city} · {fmt(result.bestBuyBase.price === Infinity ? 0 : result.bestBuyBase.price)}</span></span>
+                        <div style={{ fontSize: '10px', color: '#b4a286', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span>{t('enchantBuyIn')}: <span style={{ color: '#f0e8d4' }}>{result.bestBuyBase.city} · {fmt(result.bestBuyBase.price === Infinity ? 0 : result.bestBuyBase.price)}</span></span>
                             {result.requiredRes.map(res => (
-                                <span key={res}>{RES_EMOJI[res]} {res}: <span style={{ color: '#e2e8f0' }}>{result.bestResCities[res]?.city} · {fmt((result.bestResCities[res]?.price || 0) * result.mult)}</span></span>
+                                <span key={res}>{RES_EMOJI[res]} {res}: <span style={{ color: '#f0e8d4' }}>{result.bestResCities[res]?.city} · {fmt((result.bestResCities[res]?.price || 0) * result.mult)}</span></span>
                             ))}
-                            <span>{t('enchantSellIn')}: <span style={{ color: '#e2e8f0' }}>{result.bestSellTarget.city} · {fmt(result.bestSellTarget.price)}</span></span>
+                            <span>{t('enchantSellIn')}: <span style={{ color: '#f0e8d4' }}>{result.bestSellTarget.city} · {fmt(result.bestSellTarget.price)}</span></span>
                         </div>
                     </div>
 
@@ -257,7 +257,7 @@ export default function EnchantWidget() {
                     <div style={SI.sec}>{t('allCities')}</div>
                     {result.rows.slice(0, 7).map(row => (
                         <div key={row.city} style={SI.row}>
-                            <span style={{ color: '#64748b', fontSize: '11px' }}>{row.city}</span>
+                            <span style={{ color: '#b4a286', fontSize: '11px' }}>{row.city}</span>
                             <span style={{ fontWeight: '700', fontSize: '12px', color: row.profit > 0 ? '#22c55e' : '#ef4444' }}>{fmt(row.profit)}</span>
                         </div>
                     ))}
@@ -268,13 +268,13 @@ export default function EnchantWidget() {
                             {ledgerDone ? t('enchantLedgerDone') : ledgerLoading ? t('loading') : t('enchantSendLedger')}
                         </button>
                     ) : (
-                        <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '10px', color: '#475569' }}>🔒 {t('enchantLedgerProPlus')}</div>
+                        <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '10px', color: '#a39478' }}>🔒 {t('enchantLedgerProPlus')}</div>
                     )}
                 </>
             )}
 
             {!result && !loading && (
-                <div style={{ color: '#334155', fontSize: '11px', textAlign: 'center', padding: '20px 0' }}>{t('enchantNoData')}</div>
+                <div style={{ color: '#8a7d65', fontSize: '11px', textAlign: 'center', padding: '20px 0' }}>{t('enchantNoData')}</div>
             )}
         </div>
     );

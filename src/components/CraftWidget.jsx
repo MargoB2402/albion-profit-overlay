@@ -10,12 +10,12 @@ const fmt = n =>
 
 const SI = {
     wrap:   { padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 },
-    label:  { fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '8px' },
-    input:  { width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', color: '#e2e8f0', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
+    label:  { fontSize: '10px', color: '#a39478', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '8px' },
+    input:  { width: '100%', padding: '6px 8px', background: 'rgba(200,160,80,0.06)', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '7px', color: '#f0e8d4', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
     btn:    { padding: '6px 12px', background: '#c8a050', color: '#000', border: 'none', borderRadius: '7px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' },
-    ghost:  { background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '7px', color: '#94a3b8', cursor: 'pointer', fontSize: '11px', padding: '4px 8px' },
-    row:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '12px' },
-    sec:    { fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '10px' },
+    ghost:  { background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '7px', color: '#c6b898', cursor: 'pointer', fontSize: '11px', padding: '4px 8px' },
+    row:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(200,160,80,0.10)', fontSize: '12px' },
+    sec:    { fontSize: '10px', color: '#a39478', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px', marginTop: '10px' },
 };
 
 const CITIES    = ['Thetford', 'Fort Sterling', 'Lymhurst', 'Bridgewatch', 'Martlock', 'Caerleon', 'Brecilien'];
@@ -32,7 +32,7 @@ function ProLock({ t }) {
         <div style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)', borderRadius: '10px', padding: '14px', textAlign: 'center', margin: '16px 0' }}>
             <div style={{ fontSize: '20px', marginBottom: '6px' }}>🔒</div>
             <div style={{ fontWeight: '700', color: '#a855f7', fontSize: '13px', marginBottom: '4px' }}>{t('craftProLocked')}</div>
-            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', lineHeight: 1.5 }}>{t('craftProMsg')}</div>
+            <div style={{ fontSize: '11px', color: '#b4a286', marginBottom: '10px', lineHeight: 1.5 }}>{t('craftProMsg')}</div>
             <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>{t('upgradePro')}</a>
         </div>
     );
@@ -150,7 +150,7 @@ export default function CraftWidget({ city }) {
             <div style={SI.wrap}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                     <button onClick={() => { setSelected(null); setRecipe(null); setRecipeError(null); }} style={SI.ghost}>{t('craftBack')}</button>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#f0e8d4', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {selected.name || selected.item}
                 </span>
                 {selected.margin !== '—' && (
@@ -175,13 +175,13 @@ export default function CraftWidget({ city }) {
                 </div>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '10px' }}>
                     {RRR_PRESETS.map(p => (
-                        <button key={p.v} onClick={() => setRrr(p.v)} style={{ ...SI.ghost, background: Math.abs(rrr - p.v) < 0.01 ? 'rgba(200,160,80,0.2)' : 'transparent', color: Math.abs(rrr - p.v) < 0.01 ? '#c8a050' : '#94a3b8', border: `1px solid ${Math.abs(rrr - p.v) < 0.01 ? 'rgba(200,160,80,0.4)' : 'rgba(255,255,255,0.12)'}` }}>
+                        <button key={p.v} onClick={() => setRrr(p.v)} style={{ ...SI.ghost, background: Math.abs(rrr - p.v) < 0.01 ? 'rgba(200,160,80,0.2)' : 'transparent', color: Math.abs(rrr - p.v) < 0.01 ? '#c8a050' : '#c6b898', border: `1px solid ${Math.abs(rrr - p.v) < 0.01 ? 'rgba(200,160,80,0.4)' : 'rgba(255,255,255,0.12)'}` }}>
                             {p.label}
                         </button>
                     ))}
                 </div>
 
-                {recLoading && <div style={{ textAlign: 'center', color: '#475569', padding: '20px', fontSize: '12px' }}>{t('loading')}</div>}
+                {recLoading && <div style={{ textAlign: 'center', color: '#a39478', padding: '20px', fontSize: '12px' }}>{t('loading')}</div>}
 
                 {!recLoading && recipeError && (
                     <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '9px', padding: '12px', margin: '10px 0', textAlign: 'center' }}>
@@ -203,40 +203,40 @@ export default function CraftWidget({ city }) {
                             return (
                                 <div key={ing.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '8px', padding: '8px 10px', marginBottom: '6px' }}>
                                     {/* Строка: иконка + имя + копировать + "без возврата" */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', paddingBottom: '6px', borderBottom: '1px solid rgba(200,160,80,0.10)' }}>
                                         <img src={`https://render.albiononline.com/v1/item/${ing.id}.png?size=24`} alt="" style={{ width: '22px', height: '22px', flexShrink: 0 }} />
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <span style={{ color: '#e2e8f0', fontSize: '11px', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ingName}</span>
-                                                <button onClick={() => copyName(ingName, ing.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied === ing.id ? '#22c55e' : '#475569', fontSize: '10px', padding: '0 2px', flexShrink: 0 }}>
+                                                <span style={{ color: '#f0e8d4', fontSize: '11px', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ingName}</span>
+                                                <button onClick={() => copyName(ingName, ing.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied === ing.id ? '#22c55e' : '#a39478', fontSize: '10px', padding: '0 2px', flexShrink: 0 }}>
                                                     {copied === ing.id ? '✓' : '⎘'}
                                                 </button>
                                             </div>
-                                            <div style={{ fontSize: '10px', color: '#475569' }}>{t('craftPriceLabel')} {fmt(ing.price)} {t('craftPcs')}</div>
+                                            <div style={{ fontSize: '10px', color: '#a39478' }}>{t('craftPriceLabel')} {fmt(ing.price)} {t('craftPcs')}</div>
                                         </div>
                                         {!ing.isRefundable && <span style={{ fontSize: '9px', color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '1px 5px', borderRadius: '4px', flexShrink: 0 }}>—RRR</span>}
                                     </div>
                                     {/* Нужно / Сгорит */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                                        <div style={{ color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <div style={{ color: '#a39478', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                             <span>{t('craftBuyLabel')}</span>
                                             <span>{t('craftBurnLabel')} ({rrr}%):</span>
                                         </div>
                                         <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                            <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{Math.ceil(grossTotal)} {t('craftPcs')}<span style={{ color: '#475569', fontWeight: '400' }}>({fmt(grossCost)})</span></span>
-                                            <span style={{ color: '#22c55e', fontWeight: '700' }}>{Math.ceil(netTotal)} {t('craftPcs')}<span style={{ color: '#475569', fontWeight: '400' }}>({fmt(netCost)})</span></span>
+                                            <span style={{ color: '#f0e8d4', fontWeight: '700' }}>{Math.ceil(grossTotal)} {t('craftPcs')}<span style={{ color: '#a39478', fontWeight: '400' }}>({fmt(grossCost)})</span></span>
+                                            <span style={{ color: '#22c55e', fontWeight: '700' }}>{Math.ceil(netTotal)} {t('craftPcs')}<span style={{ color: '#a39478', fontWeight: '400' }}>({fmt(netCost)})</span></span>
                                         </div>
                                     </div>
                                 </div>
                             );
                         })}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '4px' }}>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t('craftBudgetLabel')}</span>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{fmt(recipe.ingredients.reduce((s, ing) => s + ing.grossCount * ops * ing.price, 0) + (recipe.fee || 0) * ops)}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid rgba(200,160,80,0.16)', marginTop: '4px' }}>
+                            <span style={{ fontSize: '11px', color: '#c6b898' }}>{t('craftBudgetLabel')}</span>
+                            <span style={{ fontSize: '11px', color: '#c6b898' }}>{fmt(recipe.ingredients.reduce((s, ing) => s + ing.grossCount * ops * ing.price, 0) + (recipe.fee || 0) * ops)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '4px' }}>
-                            <span style={{ fontSize: '13px', color: '#e2e8f0', fontWeight: '700' }}>{t('craftTotalCost')}</span>
+                            <span style={{ fontSize: '13px', color: '#f0e8d4', fontWeight: '700' }}>{t('craftTotalCost')}</span>
                             <span style={{ fontSize: '15px', color: '#22c55e', fontWeight: '900' }}>{fmt(totalNet + (recipe.fee || 0) * ops)}</span>
                         </div>
 
@@ -246,7 +246,7 @@ export default function CraftWidget({ city }) {
                                 {ledgerDone ? t('craftLedgerDone') : ledgerLoading ? t('loading') : t('craftSendLedger')}
                             </button>
                         ) : (
-                            <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '10px', color: '#475569' }}>
+                            <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '10px', color: '#a39478' }}>
                                 🔒 {t('craftLedgerProPlus')}
                             </div>
                         )}
@@ -269,7 +269,7 @@ export default function CraftWidget({ city }) {
                     onFocus={() => searchQuery.length >= 2 && setSearchOpen(true)}
                     onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
                 />
-                <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: '#475569', pointerEvents: 'none' }}>🔍</span>
+                <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: '#a39478', pointerEvents: 'none' }}>🔍</span>
                 {searchOpen && (
                     <SearchDropdown
                         query={searchQuery}
@@ -298,10 +298,10 @@ export default function CraftWidget({ city }) {
             </div>
 
             {/* Divider */}
-            <div style={{ fontSize: '10px', color: '#334155', textAlign: 'center', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }} />
+            <div style={{ fontSize: '10px', color: '#8a7d65', textAlign: 'center', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(200,160,80,0.10)' }} />
                 {t('craftOrTop5') || 'или ТОП-5'}
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }} />
+                <div style={{ flex: 1, height: '1px', background: 'rgba(200,160,80,0.10)' }} />
             </div>
 
             {/* City selectors */}
@@ -311,7 +311,7 @@ export default function CraftWidget({ city }) {
                     <select value={craftCity} onChange={e => setCraftCity(e.target.value)}
                         onWheel={e => { e.preventDefault(); const i = CITIES.indexOf(craftCity); setCraftCity(CITIES[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), CITIES.length - 1)]); }}
                         style={{ ...SI.input, colorScheme: 'dark' }}>
-                        {CITIES.map(c => <option key={c} value={c} style={{ background: '#1e2030', color: '#e2e8f0' }}>{c}</option>)}
+                        {CITIES.map(c => <option key={c} value={c} style={{ background: '#211b11', color: '#f0e8d4' }}>{c}</option>)}
                     </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -319,7 +319,7 @@ export default function CraftWidget({ city }) {
                     <select value={toCity} onChange={e => setToCity(e.target.value)}
                         onWheel={e => { e.preventDefault(); const i = TO_CITIES.indexOf(toCity); setToCity(TO_CITIES[Math.min(Math.max(i + (e.deltaY > 0 ? 1 : -1), 0), TO_CITIES.length - 1)]); }}
                         style={{ ...SI.input, colorScheme: 'dark' }}>
-                        {TO_CITIES.map(c => <option key={c} value={c} style={{ background: '#1e2030', color: '#e2e8f0' }}>{c}</option>)}
+                        {TO_CITIES.map(c => <option key={c} value={c} style={{ background: '#211b11', color: '#f0e8d4' }}>{c}</option>)}
                     </select>
                 </div>
             </div>
@@ -329,20 +329,20 @@ export default function CraftWidget({ city }) {
             </button>
 
             {items.length === 0 && !loading && (
-                <div style={{ color: '#334155', fontSize: '11px', textAlign: 'center', padding: '12px 0' }}>{t('craftNoItems')}</div>
+                <div style={{ color: '#8a7d65', fontSize: '11px', textAlign: 'center', padding: '12px 0' }}>{t('craftNoItems')}</div>
             )}
 
             {items.map((row, i) => (
                 <div key={row.item} onClick={() => openRecipe(row)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 0', borderBottom: '1px solid rgba(200,160,80,0.10)', cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                    <span style={{ fontSize: '10px', color: '#475569', width: '14px', flexShrink: 0 }}>{i + 1}</span>
+                    <span style={{ fontSize: '10px', color: '#a39478', width: '14px', flexShrink: 0 }}>{i + 1}</span>
                     <img src={`https://render.albiononline.com/v1/item/${row.item}.png?size=24`} alt="" style={{ width: '20px', height: '20px', flexShrink: 0 }} />
                     <span style={{ flex: 1, fontSize: '11px', color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.item}</span>
                     <span style={{ fontSize: '11px', fontWeight: '700', color: Number(row.margin) >= 0 ? '#22c55e' : '#ef4444', flexShrink: 0 }}>{Number(row.margin).toFixed(1)}%</span>
-                    <span style={{ fontSize: '10px', color: '#475569', flexShrink: 0 }}>{fmt(row.profit || 0)}</span>
+                    <span style={{ fontSize: '10px', color: '#a39478', flexShrink: 0 }}>{fmt(row.profit || 0)}</span>
                 </div>
             ))}
         </div>

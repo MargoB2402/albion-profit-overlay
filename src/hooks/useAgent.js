@@ -8,6 +8,8 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
     const wsRef    = useRef(null);
     const timerRef = useRef(null);
     const [lastEvent, setLastEvent] = useState(null);
+    const callbacks = useRef({ onConnect, onDisconnect, onEvent });
+    callbacks.current = { onConnect, onDisconnect, onEvent };
 
     const connect = useCallback(() => {
         try {
@@ -15,7 +17,7 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
             wsRef.current = ws;
 
             ws.onopen = () => {
-                onConnect?.();
+                callbacks.current.onConnect?.();
                 if (timerRef.current) clearTimeout(timerRef.current);
             };
 
@@ -23,12 +25,12 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
                 try {
                     const evt = JSON.parse(msg.data);
                     setLastEvent(evt);
-                    onEvent?.(evt);
+                    callbacks.current.onEvent?.(evt);
                 } catch {}
             };
 
             ws.onclose = () => {
-                onDisconnect?.();
+                callbacks.current.onDisconnect?.();
                 // Переподключаемся через 3 сек
                 timerRef.current = setTimeout(connect, RECONNECT_MS);
             };
@@ -39,7 +41,7 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
         } catch {
             timerRef.current = setTimeout(connect, RECONNECT_MS);
         }
-    }, [onConnect, onDisconnect, onEvent]);
+    }, []);
 
     useEffect(() => {
         // Небольшая задержка чтобы не коннектиться при каждом hot-reload

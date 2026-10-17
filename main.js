@@ -197,6 +197,20 @@ async function ensureNpcap() {
 }
 
 // ── Auto-launch AODP agent ────────────────────────────────────────────────────
+// Приватный режим: агент не отдаёт рыночные данные в публичный AODP.
+//
+// Отключаем именно адрес приёмника (-i ""), а НЕ флаг -d. У -d в агенте ранний
+// выход в sendMsgToPrivateUploaders — до отправки в локальный веб-сокет, то есть
+// вместе с выгрузкой он отрезал бы и нас самих от персонализированных событий.
+//
+// Значение кэшируем в конфиге: при старте профиль ещё не загружен, а решение
+// нужно принять сразу. Иначе приватный пользователь каждый запуск успевал бы
+// отдать наружу всё, что видит, за те секунды, пока грузится профиль.
+function agentArgs() {
+    const priv = readConfig().privateMode === true;
+    return priv ? ['-i', ''] : [];
+}
+
 function launchAgent() {
     if (isDev) return; // в dev-режиме агент запускается вручную
     try {
@@ -209,11 +223,18 @@ function launchAgent() {
             console.warn('[agent] agent.exe not found at', agentPath);
             return;
         }
-        agentProc = require('child_process').spawn(agentPath, [], {
+        const args = agentArgs();
+        agentProc = require('child_process').spawn(agentPath, args, {
             detached: false,
             stdio:    ['ignore', 'ignore', 'pipe'],
             windowsHide: true,
         });
+        // Пишем режим ВСЕГДА, а не только когда он включён: в логе должно быть
+        // видно и обратное — что выгрузка идёт, — иначе отсутствие строки можно
+        // прочитать и как «приватный выключен», и как «лог не дописался».
+        syncLog(args.length
+            ? `[agent] запущен с ${JSON.stringify(args)} — ПРИВАТНЫЙ режим, выгрузка в AODP отключена`
+            : '[agent] запущен без аргументов — обычный режим, данные уходят в AODP');
         // Раньше stderr игнорировался целиком — при крашах (например, panic → exit code 2)
         // причина терялась безвозвратно, было видно только "exited with code 2" без деталей.
         let stderrBuf = '';
@@ -896,7 +917,7 @@ ipcMain.handle('ocr-albion', async () => {
 });
 
 // ── API прокси (URL не меняется из renderer) ──────────────────────────────────
-ipcMain.handle('api-fetch', async (_, { url, method = 'GET', body = null, headers = {} }) => {
+ipcMain.handle('api-fetch', async (_, { url, method = 'GET', body = null, headers = {}, timeoutMs = 30000 }) => {
     // Уровень 2: блокируем запросы не на наш домен
     if (!isDev && !url.startsWith(API_BASE) && !url.startsWith('http://127.0.0.1')) {
         console.warn('[api-fetch] BLOCKED unauthorized domain:', url);
@@ -928,6 +949,8 @@ ipcMain.handle('api-fetch', async (_, { url, method = 'GET', body = null, header
                 }
             });
         });
+        const deadline = setTimeout(() => req.destroy(new Error('request_timeout')), Math.max(3000, Math.min(Number(timeoutMs) || 30000, 30000)));
+        req.once('close', () => clearTimeout(deadline));
         req.on('error', (err) => resolve({ ok: false, status: 0, data: null, error: err.message }));
         if (body) req.write(JSON.stringify(body));
         req.end();
@@ -1012,6 +1035,22 @@ function writeConfig(data) {
     } catch (e) { console.error('[config] save error:', e.message); return false; }
 }
 
+// Окно сообщает сюда актуальный режим после загрузки профиля. Перезапускаем
+// агента только если значение изменилось: лишний перезапуск теряет сессию
+// перехвата, и человек на несколько секунд остаётся без цен.
+ipcMain.handle('set-private-mode', (_, enabled) => {
+    const cfg = readConfig();
+    syncLog(`[private] окно сообщило режим=${!!enabled}, в конфиге=${cfg.privateMode === true}`);
+    if (cfg.privateMode === !!enabled) return { changed: false };
+    cfg.privateMode = !!enabled;
+    writeConfig(cfg);
+    syncLog('[agent] режим изменился → перезапуск, приватный =', !!enabled);
+    try { agentProc?.kill(); } catch {}
+    agentProc = null;
+    setTimeout(launchAgent, 800);
+    return { changed: true };
+});
+
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('get-config', () => {
@@ -1028,6 +1067,13 @@ ipcMain.handle('save-config', (_, config) => {
     const current = readConfig();
     const { apiBase: _ignored, ...safe } = config; // apiBase не сохраняем
     return writeConfig({ ...current, ...safe });
+});
+
+ipcMain.handle('sign-price-batch', async (_, { region, privateOnly, prices }) => {
+    if (!Array.isArray(prices) || prices.length < 1 || prices.length > 64) throw new Error('Invalid batch');
+    const ts = Math.floor(Date.now() / 1000);
+    const msg = `${ts}|${region}|${privateOnly ? 'private' : 'public'}|${JSON.stringify(prices)}`;
+    return { ts, sig: crypto.createHmac('sha256', OVERLAY_REPORT_KEY).update(msg).digest('hex') };
 });
 
 // Price contribution signing

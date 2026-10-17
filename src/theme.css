@@ -1,0 +1,8 @@
+:root { color-scheme: dark; font: 13px system-ui, sans-serif; color: #f0e8d4; }
+button, input, select, textarea { font-family: inherit; }
+input:not([type=checkbox]), select, textarea { min-height: 32px; }
+select, option { background-color: #211b11; color: #f0e8d4; }
+button { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #c8a050 !important; outline-offset: 2px; }
+::-webkit-scrollbar-thumb { background: #725a2e; border-radius: 4px; }
+[data-price-source] { white-space: nowrap; }

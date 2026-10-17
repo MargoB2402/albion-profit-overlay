@@ -5,7 +5,7 @@ import { useI18n } from '../hooks/useI18n';
 const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(Math.round(n));
 
 const QUALITY = [
-    { v: 1, short: 'N', label: 'Normal',      color: '#64748b' },
+    { v: 1, short: 'N', label: 'Normal',      color: '#b4a286' },
     { v: 2, short: 'G', label: 'Good',         color: '#22c55e' },
     { v: 3, short: 'O', label: 'Outstanding',  color: '#3b82f6' },
     { v: 4, short: 'E', label: 'Excellent',    color: '#a855f7' },
@@ -38,7 +38,7 @@ export default function TradeNotification({ trade, onConfirm, onDismiss }) {
     return (
         <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
-            background: 'rgba(10,12,20,0.97)',
+            background: '#17130c',
             borderTop: `2px solid ${isBuy ? '#3b82f6' : '#22c55e'}`,
             padding: '12px',
             animation: 'slideUp 0.2s ease-out',
@@ -48,14 +48,14 @@ export default function TradeNotification({ trade, onConfirm, onDismiss }) {
             </div>
 
             <div style={{ marginBottom: '10px' }}>
-                <div style={{ fontWeight: '700', fontSize: '14px', color: '#e2e8f0', marginBottom: '2px' }}>{p.item_name || p.item_id}</div>
-                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                    {p.quantity} {t('craftPcs')} × {fmt(p.price)} = <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{fmt(total)}</span>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: '#f0e8d4', marginBottom: '2px' }}>{p.item_name || p.item_id}</div>
+                <div style={{ fontSize: '12px', color: '#c6b898' }}>
+                    {p.quantity} {t('craftPcs')} × {fmt(p.price)} = <span style={{ color: '#f0e8d4', fontWeight: '700' }}>{fmt(total)}</span>
                     <span style={{ marginLeft: '8px' }}>📍 {p.city}</span>
                 </div>
                 {/* Quality picker */}
                 <div style={{ display: 'flex', gap: '4px', marginTop: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '10px', color: '#475569', marginRight: '2px' }}>Quality:</span>
+                    <span style={{ fontSize: '10px', color: '#a39478', marginRight: '2px' }}>Quality:</span>
                     {QUALITY.map(q => (
                         <button key={q.v} onClick={() => setQuality(q.v)} title={q.label}
                             style={{ width: '26px', height: '22px', borderRadius: '5px', border: `1px solid ${q.color}55`, background: quality === q.v ? q.color + '33' : 'transparent', color: q.color, fontWeight: '700', fontSize: '10px', cursor: 'pointer' }}>
@@ -78,7 +78,7 @@ export default function TradeNotification({ trade, onConfirm, onDismiss }) {
                     </button>
                     <button
                         onClick={onDismiss}
-                        style={{ padding: '7px 12px', background: 'rgba(255,255,255,0.06)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                        style={{ padding: '7px 12px', background: 'rgba(200,160,80,0.06)', color: '#c6b898', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
                     >
                         ✕
                     </button>

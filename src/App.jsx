@@ -12,6 +12,7 @@ import Settings from './components/Settings';
 import { useAgent } from './hooks/useAgent';
 import { useApi } from './hooks/useApi';
 import { useI18n } from './hooks/useI18n';
+import { MARKET_CITIES } from './marketOrders.mjs';
 
 const TABS = [
     { id: 'price',     icon: '₴' },
@@ -29,7 +30,8 @@ const TAB_KEYS = { price: 'tabPrice', transport: 'tabTransport', craft: 'tabCraf
 export default function App() {
     const [tab, setTab]                   = useState('price');
     const [ocrCity, setOcrCity] = useState(null); // город от OCR
-    const city = ocrCity || 'unknown';
+    const [agentMarketCity, setAgentMarketCity] = useState(null);
+    const city = agentMarketCity || ocrCity || 'unknown';
     const [pendingTrade, setPendingTrade] = useState(null);
     const [updateInfo, setUpdateInfo]     = useState(null); // { latest, url }
     // При первом запуске (нет сохранённых данных) — сразу показываем настройки
@@ -46,7 +48,7 @@ export default function App() {
     const [minimized, setMinimized]       = useState(false);
     const dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
 
-    const { config, isLoggedIn, isPro, isProPlus, saveConfig, logout } = useApi();
+    const { config, isLoggedIn, isPro, isProPlus, saveConfig, logout, privateMode, togglePrivateMode, contributeOrders, captureStatus: capture } = useApi();
     const { t } = useI18n();
 
     // Проверяем обновление при запуске (раз в сессию)
@@ -68,10 +70,27 @@ export default function App() {
             }
             if (evt.type === 'location') {
                 setAgentLocationKnown(true);
+                setAgentMarketCity(null);
+                setOcrCity(MARKET_CITIES.includes(evt.payload?.city) ? evt.payload.city : null);
+            }
+            if (evt.type === 'market_view') {
+                setAgentMarketCity(MARKET_CITIES.includes(evt.payload?.city) ? evt.payload.city : 'unknown');
             }
             // market_view НЕ переключает вкладку — агент только передаёт товарную позицию
         },
     });
+
+    // Collection belongs to the app, so changing tabs, opening settings or
+    // collapsing the panel never stops processing the auction page.
+    useEffect(() => {
+        if (lastEvent?.type !== 'market_view' || !isLoggedIn) return;
+        const payload = lastEvent.payload || {};
+        // OCR may see our own panel or an old market title. It must never decide
+        // the destination of an uploaded quote, even before the first zone join.
+        const marketCity = payload.city;
+        if (!MARKET_CITIES.includes(marketCity)) return;
+        contributeOrders({ city: marketCity, orders: payload.orders });
+    }, [lastEvent, isLoggedIn, contributeOrders]);
 
     const toggleMinimize = useCallback(() => {
         const next = !minimized;
@@ -102,7 +121,7 @@ export default function App() {
         return (
             <div onMouseDown={onMouseDown} style={{
                 width: '100vw', height: '100vh',
-                background: 'linear-gradient(90deg, rgba(12,14,26,0.97) 0%, rgba(8,10,20,0.99) 100%)',
+                background: 'linear-gradient(90deg, rgba(23,19,12,0.98) 0%, rgba(13,11,8,0.99) 100%)',
                 backdropFilter: 'blur(20px)',
                 borderRadius: '10px',
                 border: '1px solid rgba(200,160,80,0.18)',
@@ -110,7 +129,7 @@ export default function App() {
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '0 10px',
                 fontFamily: "'Inter', -apple-system, sans-serif",
-                color: '#e2e8f0',
+                color: '#f0e8d4',
                 overflow: 'hidden',
                 userSelect: 'none',
                 cursor: 'grab',
@@ -120,9 +139,9 @@ export default function App() {
                     {t('appName')}
                 </span>
                 {city !== 'unknown' && (
-                    <span style={{ fontSize: '9px', color: '#64748b' }}>📍 {city}</span>
+                    <span style={{ fontSize: '9px', color: '#b4a286' }}>📍 {city}</span>
                 )}
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, background: agentConnected ? '#22c55e' : '#475569', boxShadow: agentConnected ? '0 0 4px #22c55e88' : 'none' }} />
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, background: agentConnected ? '#22c55e' : '#a39478', boxShadow: agentConnected ? '0 0 4px #22c55e88' : 'none' }} />
                 <button onClick={toggleMinimize} style={{ background: 'transparent', border: '1px solid rgba(200,160,80,0.3)', borderRadius: '4px', color: '#c8a050', cursor: 'pointer', fontSize: '11px', padding: '1px 5px', lineHeight: 1 }}>
                     {t('expandBtn')}
                 </button>
@@ -133,14 +152,14 @@ export default function App() {
     return (
         <div onMouseDown={onMouseDown} style={{
             width: '100vw', height: '100vh',
-            background: 'linear-gradient(160deg, rgba(12,14,26,0.95) 0%, rgba(8,10,20,0.97) 100%)',
+            background: 'linear-gradient(160deg, rgba(23,19,12,0.98) 0%, rgba(13,11,8,0.99) 100%)',
             backdropFilter: 'blur(20px)',
             borderRadius: '14px',
             border: '1px solid rgba(200,160,80,0.18)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(200,160,80,0.10)',
             display: 'flex', flexDirection: 'column',
             fontFamily: "'Inter', -apple-system, sans-serif",
-            color: '#e2e8f0',
+            color: '#f0e8d4',
             overflow: 'hidden',
             userSelect: 'none',
         }}>
@@ -164,9 +183,9 @@ export default function App() {
                 {/* City badge */}
                 {city !== 'unknown' && (
                     <span style={{
-                        fontSize: '10px', color: '#94a3b8',
-                        background: 'rgba(255,255,255,0.06)', padding: '2px 7px',
-                        borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
+                        fontSize: '10px', color: '#c6b898',
+                        background: 'rgba(200,160,80,0.06)', padding: '2px 7px',
+                        borderRadius: '20px', border: '1px solid rgba(200,160,80,0.16)',
                         maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                         📍 {city}
@@ -175,44 +194,45 @@ export default function App() {
 
                 {/* Settings button — заметная кнопка */}
                 <button
+                    aria-label="Settings"
                     onClick={() => setSettingsOpen(s => !s)}
                     style={{
                         marginLeft: 'auto',
                         display: 'flex', alignItems: 'center', gap: '4px',
-                        background: settingsOpen ? 'rgba(200,160,80,0.18)' : 'rgba(255,255,255,0.06)',
-                        border: `1px solid ${settingsOpen ? 'rgba(200,160,80,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                        background: settingsOpen ? 'rgba(200,160,80,0.18)' : 'rgba(200,160,80,0.06)',
+                        border: `1px solid ${settingsOpen ? 'rgba(200,160,80,0.5)' : 'rgba(200,160,80,0.22)'}`,
                         borderRadius: '7px',
-                        color: settingsOpen ? '#c8a050' : '#94a3b8',
+                        color: settingsOpen ? '#c8a050' : '#c6b898',
                         cursor: 'pointer', fontSize: '11px', fontWeight: '600',
                         padding: '3px 9px', letterSpacing: '0.03em',
                         transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,160,80,0.4)'; e.currentTarget.style.color = '#c8a050'; }}
-                    onMouseLeave={e => { if (!settingsOpen) { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#94a3b8'; } }}
+                    onMouseLeave={e => { if (!settingsOpen) { e.currentTarget.style.borderColor = 'rgba(200,160,80,0.22)'; e.currentTarget.style.color = '#c6b898'; } }}
                 >
                     ⚙ {!isLoggedIn ? <span style={{ color: '#f59e0b' }}>!</span> : null}
                 </button>
 
                 {/* Minimize */}
-                <button onClick={toggleMinimize} title={t('miniBtn')} style={{
-                    background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '6px', color: '#475569', cursor: 'pointer',
+                <button aria-label="Minimize" onClick={toggleMinimize} title={t('miniBtn')} style={{
+                    background: 'transparent', border: '1px solid rgba(200,160,80,0.16)',
+                    borderRadius: '6px', color: '#a39478', cursor: 'pointer',
                     fontSize: '14px', lineHeight: 1, padding: '2px 7px',
                     transition: 'color 0.15s',
                 }}
                     onMouseEnter={e => e.currentTarget.style.color = '#c8a050'}
-                    onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+                    onMouseLeave={e => e.currentTarget.style.color = '#a39478'}
                 >—</button>
 
                 {/* Close */}
                 <button onClick={() => window.electron?.closeWindow()} style={{
-                    background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '6px', color: '#475569', cursor: 'pointer',
+                    background: 'transparent', border: '1px solid rgba(200,160,80,0.16)',
+                    borderRadius: '6px', color: '#a39478', cursor: 'pointer',
                     fontSize: '15px', lineHeight: 1, padding: '2px 7px',
                     transition: 'color 0.15s',
                 }}
                     onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                    onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+                    onMouseLeave={e => e.currentTarget.style.color = '#a39478'}
                 >×</button>
             </div>
 
@@ -237,28 +257,31 @@ export default function App() {
                     </button>
                     <button
                         onClick={() => setUpdateInfo(null)}
-                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '14px', padding: '0 2px', flexShrink: 0 }}
+                        style={{ background: 'none', border: 'none', color: '#c6b898', cursor: 'pointer', fontSize: '14px', padding: '0 2px', flexShrink: 0 }}
                     >×</button>
                 </div>
             )}
 
+            {capture && <div role="status" style={{ padding: '6px 12px', fontSize: '11px', color: capture.failed ? '#e8a030' : '#b4a286' }}>
+                {t('capturedQuotes')}: {capture.sent} · {t('capturePending')}: {capture.pending}{capture.dropped > 0 && ` · ${t('captureDropped')}: ${capture.dropped}`}{capture.failed > 0 && ` · ${t('captureFailed')}: ${capture.failed}`}
+            </div>}
             {/* ── Tabs ── */}
             {!settingsOpen && (
                 <div style={{
                     display: 'flex',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    borderBottom: '1px solid rgba(200,160,80,0.10)',
                     background: 'rgba(0,0,0,0.2)',
                     flexShrink: 0,
                 }}>
                     {TABS.map(({ id, icon }) => {
                         const active = tab === id;
                         return (
-                            <button key={id} onClick={() => setTab(id)} style={{
+                            <button key={id} data-module-tab={id} aria-pressed={active} onClick={() => setTab(id)} style={{
                                 flex: 1, padding: '7px 4px 6px',
                                 background: active ? 'rgba(200,160,80,0.12)' : 'transparent',
                                 border: 'none',
                                 borderBottom: `2px solid ${active ? '#c8a050' : 'transparent'}`,
-                                color: active ? '#c8a050' : '#475569',
+                                color: active ? '#c8a050' : '#a39478',
                                 cursor: 'pointer', fontSize: '16px',
                                 transition: 'all 0.15s',
                                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
@@ -278,6 +301,7 @@ export default function App() {
                 {settingsOpen ? (
                     <Settings
                         config={config} isLoggedIn={isLoggedIn} isPro={isPro} isProPlus={isProPlus}
+                        privateMode={privateMode} togglePrivateMode={togglePrivateMode}
                         saveConfig={saveConfig} logout={logout}
                         agentLocationKnown={agentLocationKnown} onClose={() => {
                         localStorage.setItem('overlay-first-run', JSON.stringify({ configured: true }));

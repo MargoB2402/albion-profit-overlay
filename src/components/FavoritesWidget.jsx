@@ -35,7 +35,7 @@ export default function FavoritesWidget() {
 
     if (!isLoggedIn) {
         return (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#475569', flex: 1 }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#a39478', flex: 1 }}>
                 <div style={{ fontSize: '30px', marginBottom: '8px' }}>⭐</div>
                 <div style={{ fontSize: '12px', lineHeight: 1.5 }}>{t('favLogin')}</div>
             </div>
@@ -45,17 +45,17 @@ export default function FavoritesWidget() {
     return (
         <div style={{ padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#475569' }}>{t('favTracked')}: {items.length}</span>
+                <span style={{ fontSize: '11px', color: '#a39478' }}>{t('favTracked')}: {items.length}</span>
                 <a href="https://promptly.sbs/favorites" target="_blank" rel="noreferrer"
                     style={{ fontSize: '11px', color: '#c8a050', textDecoration: 'none', fontWeight: '600' }}>
                     {t('favOpenSite')}
                 </a>
             </div>
 
-            {loading && <div style={{ color: '#475569', fontSize: '11px' }}>{t('favLoading')}</div>}
+            {loading && <div style={{ color: '#a39478', fontSize: '11px' }}>{t('favLoading')}</div>}
 
             {!loading && items.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#334155', padding: '20px 0' }}>
+                <div style={{ textAlign: 'center', color: '#8a7d65', padding: '20px 0' }}>
                     <div style={{ fontSize: '26px', marginBottom: '6px' }}>☆</div>
                     <div style={{ fontSize: '11px' }}>{t('favEmpty')}</div>
                 </div>
@@ -71,13 +71,13 @@ export default function FavoritesWidget() {
                         display: 'flex', alignItems: 'center', gap: '8px',
                     }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: '600', fontSize: '12px', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: '600', fontSize: '12px', color: '#f0e8d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {name}
                             </div>
                             {item.locked ? (
                                 <div style={{ fontSize: '10px', color: '#c8a050' }}>{t('favLockedPro')}</div>
                             ) : (
-                                <div style={{ fontSize: '10px', color: '#475569' }}>
+                                <div style={{ fontSize: '10px', color: '#a39478' }}>
                                     {item.best_city} · {fmt(item.best_price)} · {item.daily_volume}/{t('daily')}
                                 </div>
                             )}

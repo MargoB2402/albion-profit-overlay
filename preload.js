@@ -20,10 +20,15 @@ contextBridge.exposeInMainWorld('electron', {
     setMinimized: (mini) => ipcRenderer.send('window-minimize-toggle', mini),
 
     // Price contribution signing (HMAC lives in main process)
+    signPriceBatch: (payload) => ipcRenderer.invoke('sign-price-batch', payload),
     signPriceReport: (payload) => ipcRenderer.invoke('sign-price-report', payload),
 
     // Update check (для баннера)
     checkGithubUpdate: () => ipcRenderer.invoke('check-github-update'),
+
+    // Приватный режим: сообщаем main актуальное состояние после загрузки профиля,
+    // он при изменении перезапускает агента с другими аргументами.
+    setPrivateMode: (enabled) => ipcRenderer.invoke('set-private-mode', enabled),
 
     // Версия приложения (для отображения в настройках)
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),

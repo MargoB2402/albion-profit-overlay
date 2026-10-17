@@ -1,3 +1,4 @@
+import { priceSourceLocales } from '../priceSources.js';
 import { useState, useEffect, useCallback } from 'react';
 
 const STORAGE_KEY = 'overlay_lang';
@@ -90,6 +91,14 @@ const DICTS = {
         settingsTitle: 'Настройки',
         accountOk: 'Аккаунт подключён · PRO+ функции активны',
         logoutBtn: 'Выйти',
+        // Приватный режим
+        privateTitle: 'Приватный режим',
+        privateTurnOn: 'Включить', privateTurnOff: 'Выключить',
+        privateOnShort: 'Цены не уходят в общий пул и в AODP. Видны только вам.',
+        privateOffShort: 'Собранные цены пополняют общие таблицы сайта и базу AODP.',
+        privateNeedProPlus: 'Приватный режим доступен на PRO+.',
+        privateErr: 'Не удалось переключить режим.',
+        privateMineHint: 'Ваша цена — в общий пул не отправлена',
         accountNo: 'Аккаунт не подключён',
         accountHowTo: 'Войди на', accountHowTo2: 'Профиль → Overlay Token → скопируй Wallet и Token',
         walletLabel: 'Кошелёк (wallet address)',
@@ -216,6 +225,14 @@ const DICTS = {
         settingsTitle: 'Settings',
         accountOk: 'Account connected · PRO+ features active',
         logoutBtn: 'Log out',
+        // Private mode
+        privateTitle: 'Private mode',
+        privateTurnOn: 'Turn on', privateTurnOff: 'Turn off',
+        privateOnShort: 'Prices stay out of the shared pool and AODP. Only you see them.',
+        privateOffShort: 'Prices you collect feed the shared site tables and the AODP database.',
+        privateNeedProPlus: 'Private mode is a PRO+ feature.',
+        privateErr: 'Could not switch the mode.',
+        privateMineHint: 'Your own price — never sent to the shared pool',
         accountNo: 'Account not connected',
         accountHowTo: 'Sign in at', accountHowTo2: 'Profile → Overlay Token → copy Wallet and Token',
         walletLabel: 'Wallet address',
@@ -337,6 +354,14 @@ const DICTS = {
         settingsTitle: 'Einstellungen',
         accountOk: 'Konto verbunden · PRO+ Funktionen aktiv',
         logoutBtn: 'Abmelden',
+        // Privater Modus
+        privateTitle: 'Privater Modus',
+        privateTurnOn: 'Einschalten', privateTurnOff: 'Ausschalten',
+        privateOnShort: 'Preise gehen nicht in den gemeinsamen Pool und nicht an AODP. Nur du siehst sie.',
+        privateOffShort: 'Gesammelte Preise fließen in die Tabellen der Seite und in die AODP-Datenbank.',
+        privateNeedProPlus: 'Der private Modus gehört zu PRO+.',
+        privateErr: 'Modus konnte nicht umgeschaltet werden.',
+        privateMineHint: 'Dein eigener Preis — nicht an den gemeinsamen Pool gesendet',
         accountNo: 'Kein Konto verbunden',
         accountHowTo: 'Anmelden auf', accountHowTo2: 'Profil → Overlay Token → Wallet und Token kopieren',
         walletLabel: 'Wallet-Adresse',
@@ -458,6 +483,14 @@ const DICTS = {
         settingsTitle: 'Ajustes',
         accountOk: 'Cuenta conectada · funciones PRO+ activas',
         logoutBtn: 'Cerrar sesión',
+        // Modo privado
+        privateTitle: 'Modo privado',
+        privateTurnOn: 'Activar', privateTurnOff: 'Desactivar',
+        privateOnShort: 'Los precios no van al fondo común ni a AODP. Solo tú los ves.',
+        privateOffShort: 'Los precios que recoges alimentan las tablas del sitio y la base AODP.',
+        privateNeedProPlus: 'El modo privado es una función PRO+.',
+        privateErr: 'No se pudo cambiar el modo.',
+        privateMineHint: 'Tu propio precio: no se envió al fondo común',
         accountNo: 'Sin cuenta conectada',
         accountHowTo: 'Inicia sesión en', accountHowTo2: 'Perfil → Overlay Token → copia Wallet y Token',
         walletLabel: 'Dirección wallet',
@@ -510,6 +543,8 @@ export const LANG_OPTIONS = [
     { code: 'de', label: 'Deutsch' },
     { code: 'es', label: 'Español' },
 ];
+
+for (const [lang, dict] of Object.entries(DICTS)) Object.assign(dict, priceSourceLocales[lang]);
 
 function getInitialLang() {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'en';

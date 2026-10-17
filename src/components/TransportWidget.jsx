@@ -1,3 +1,4 @@
+import { PriceSource } from './PriceSource.jsx';
 import SearchDropdown from './ItemSearchDropdown';
 import React, { useState, useCallback, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
@@ -11,12 +12,12 @@ const ENCHANT_FILTER_OPTIONS = ['0', '1', '2', '3', '4'];
 
 const S = {
     wrap:   { padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 },
-    label:  { fontSize: '10px', color: '#475569', marginBottom: '3px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' },
-    input:  { width: '100%', padding: '7px 9px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
-    select: { width: '100%', padding: '7px 9px', background: 'rgba(12,14,26,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px', outline: 'none', colorScheme: 'dark' },
+    label:  { fontSize: '10px', color: '#a39478', marginBottom: '3px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' },
+    input:  { width: '100%', padding: '7px 9px', background: 'rgba(200,160,80,0.06)', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '8px', color: '#f0e8d4', fontSize: '12px', outline: 'none', boxSizing: 'border-box' },
+    select: { width: '100%', padding: '7px 9px', background: '#211b11', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '8px', color: '#f0e8d4', fontSize: '12px', outline: 'none', colorScheme: 'dark' },
     btn:    { width: '100%', padding: '8px', background: '#c8a050', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px', marginTop: '8px' },
-    sec:    { fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '5px', marginTop: '10px' },
-    card:   { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '9px', padding: '10px 12px', marginBottom: '6px' },
+    sec:    { fontSize: '10px', color: '#a39478', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '5px', marginTop: '10px' },
+    card:   { background: 'rgba(200,160,80,0.10)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '9px', padding: '10px 12px', marginBottom: '6px' },
     row:    { display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '12px' },
 };
 
@@ -25,15 +26,15 @@ function ResultCard({ result, tax, t }) {
         <div style={{ ...S.card, border: `1px solid ${result.profit >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
             <div style={{ fontWeight: '700', marginBottom: '7px', fontSize: '13px' }}>{result.itemName}</div>
             {[
-                [t('buyPriceCol'),    fmt(result.fromPrice), '#64748b'],
-                [t('sellBeforeTax'), fmt(result.toPrice),   '#94a3b8'],
-                [`${t('afterTaxLabel')} ${tax}%`, fmt(result.afterTax), '#e2e8f0'],
+                [t('buyPriceCol'),    fmt(result.fromPrice), '#b4a286', result.buySource],
+                [t('sellBeforeTax'), fmt(result.toPrice),   '#c6b898', result.sellSource],
+                [`${t('afterTaxLabel')} ${tax}%`, fmt(result.afterTax), '#f0e8d4'],
                 [t('profitPer'),     (result.profit >= 0 ? '+' : '') + fmt(result.profit), result.profit >= 0 ? '#22c55e' : '#ef4444'],
                 [t('marginLabel'),   result.margin + '%', result.margin >= 0 ? '#22c55e' : '#ef4444'],
-            ].map(([l, v, c]) => (
+            ].map(([l, v, c, source]) => (
                 <div key={l} style={S.row}>
-                    <span style={{ color: '#475569' }}>{l}</span>
-                    <span style={{ color: c, fontWeight: '600' }}>{v}</span>
+                    <span style={{ color: '#a39478' }}>{l}</span>
+                    <span style={{ color: c, fontWeight: '600' }}>{v}<PriceSource source={source} t={t} /></span>
                 </div>
             ))}
         </div>
@@ -54,16 +55,16 @@ function Top5Card({ item, t }) {
                 fontSize: '10px', color: '#c8a050', fontWeight: '800', flexShrink: 0,
             }}>T{item.tier}{item.enchant ? `.${item.enchant}` : ''}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '11px', fontWeight: '600', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: '#f0e8d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {item.itemName}
                 </div>
-                <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px' }}>
-                    {fmt(item.buyPrice)} → {fmt(item.sellPrice)} · {item.daily}/{t('daily')}
+                <div style={{ fontSize: '10px', color: '#a39478', marginTop: '1px' }}>
+                    {fmt(item.buyPrice)}<PriceSource source={item.buySource} t={t} /> → {fmt(item.sellPrice)}<PriceSource source={item.sellSource} t={t} /> · {item.daily}/{t('daily')}
                 </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: '12px', fontWeight: '800', color: '#22c55e' }}>+{fmt(item.profit)}</div>
-                <div style={{ fontSize: '10px', color: '#64748b' }}>{item.margin}%</div>
+                <div style={{ fontSize: '10px', color: '#b4a286' }}>{item.margin}%</div>
             </div>
         </div>
     );
@@ -115,7 +116,7 @@ export default function TransportWidget({ city }) {
             if (!fromPrice || !toPrice) { setResult({ error: t('noPrices') }); return; }
             const afterTax = Math.round(toPrice * (1 - tax / 100));
             const profit   = afterTax - fromPrice;
-            setResult({ fromPrice, toPrice, afterTax, profit, margin: ((profit / fromPrice) * 100).toFixed(1), itemName: data.itemName });
+            setResult({ fromPrice, toPrice, buySource: data.prices.find(p => p.city === from)?.sellSource, sellSource: data.prices.find(p => p.city === to)?.sellSource, afterTax, profit, margin: ((profit / fromPrice) * 100).toFixed(1), itemName: data.itemName });
         } catch (e) { setResult({ error: e.message }); }
         setLoading(false);
     };
@@ -151,7 +152,7 @@ export default function TransportWidget({ city }) {
                         flex: 1, padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer',
                         fontWeight: '600', fontSize: '11px',
                         background: mode === m ? 'rgba(200,160,80,0.2)' : 'transparent',
-                        color: mode === m ? '#c8a050' : '#475569',
+                        color: mode === m ? '#c8a050' : '#a39478',
                     }}>
                         {icon} {mode === m ? (m === 'single' ? t('itemLabel') : t('top5Title')) : (m === 'single' ? t('itemLabel') : t('top5Title'))}
                     </button>
@@ -166,7 +167,7 @@ export default function TransportWidget({ city }) {
                         {CITIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '1px', fontSize: '14px', color: '#475569' }}>→</div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '1px', fontSize: '14px', color: '#a39478' }}>→</div>
                 <div style={{ flex: 1 }}>
                     <label style={S.label}>{t('toLabel')}</label>
                     <select style={S.select} value={to} onChange={e => setTo(e.target.value)}>
@@ -219,13 +220,13 @@ export default function TransportWidget({ city }) {
                     {/* Filter choice prompt */}
                     {filterMode === null && !top5Loading && (
                         <div style={{ ...S.card, textAlign: 'center' }}>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '10px', lineHeight: 1.5 }}>
+                            <div style={{ fontSize: '11px', color: '#c6b898', marginBottom: '10px', lineHeight: 1.5 }}>
                                 {t('filterAll')} {t('orLabel')} {t('filterSafe')}?
                             </div>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <button onClick={() => handleFilterChoice('all')} style={{
-                                    flex: 1, padding: '7px', border: '1px solid rgba(255,255,255,0.1)',
-                                    borderRadius: '7px', background: 'transparent', color: '#94a3b8',
+                                    flex: 1, padding: '7px', border: '1px solid rgba(200,160,80,0.22)',
+                                    borderRadius: '7px', background: 'transparent', color: '#c6b898',
                                     cursor: 'pointer', fontSize: '11px',
                                 }}>
                                     {t('filterAll')}
@@ -239,12 +240,12 @@ export default function TransportWidget({ city }) {
                                 </button>
                             </div>
                             {filterMode !== null && (
-                                <div style={{ fontSize: '10px', color: '#475569', marginTop: '6px' }}>
+                                <div style={{ fontSize: '10px', color: '#a39478', marginTop: '6px' }}>
                                     {t('filterDesc')}
                                 </div>
                             )}
                             <button onClick={() => { /* handled by Settings */ }} style={{
-                                background: 'none', border: 'none', color: '#475569', cursor: 'pointer',
+                                background: 'none', border: 'none', color: '#a39478', cursor: 'pointer',
                                 fontSize: '10px', marginTop: '8px', textDecoration: 'underline',
                             }}>
                                 {t('filterSettings')}
@@ -253,7 +254,7 @@ export default function TransportWidget({ city }) {
                     )}
 
                     {top5Loading && (
-                        <div style={{ color: '#475569', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>
+                        <div style={{ color: '#a39478', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>
                             {t('loading')} TOP-5…
                         </div>
                     )}
@@ -263,17 +264,17 @@ export default function TransportWidget({ city }) {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                                 <div style={S.sec}>{t('top5Title')} · {from} → {to}</div>
                                 <button onClick={() => setFilterMode(null)} style={{
-                                    background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '10px',
+                                    background: 'none', border: 'none', color: '#a39478', cursor: 'pointer', fontSize: '10px',
                                 }}>↩</button>
                             </div>
                             {filterMode === 'safe' && (
-                                <div style={{ fontSize: '10px', color: '#475569', marginBottom: '6px', background: 'rgba(200,160,80,0.06)', borderRadius: '6px', padding: '4px 8px' }}>
+                                <div style={{ fontSize: '10px', color: '#a39478', marginBottom: '6px', background: 'rgba(200,160,80,0.06)', borderRadius: '6px', padding: '4px 8px' }}>
                                     🔒 {t('filterDesc')}
                                 </div>
                             )}
                             {top5.items.map(item => <Top5Card key={item.itemId} item={item} t={t} />)}
                             {!top5.isPro && (
-                                <div style={{ fontSize: '10px', color: '#475569', textAlign: 'center', marginTop: '4px' }}>
+                                <div style={{ fontSize: '10px', color: '#a39478', textAlign: 'center', marginTop: '4px' }}>
                                     T7–T8 · <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer" style={{ color: '#c8a050' }}>PRO</a>
                                 </div>
                             )}
@@ -281,7 +282,7 @@ export default function TransportWidget({ city }) {
                     )}
 
                     {filterMode !== null && !top5Loading && top5?.items?.length === 0 && (
-                        <div style={{ color: '#475569', fontSize: '11px', textAlign: 'center', padding: '12px 0' }}>
+                        <div style={{ color: '#a39478', fontSize: '11px', textAlign: 'center', padding: '12px 0' }}>
                             {t('noResults')}
                         </div>
                     )}

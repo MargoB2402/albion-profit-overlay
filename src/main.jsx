@@ -1,3 +1,4 @@
+import './theme.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -11,7 +12,7 @@ class ErrorBoundary extends React.Component {
             return (
                 <div style={{
                     padding: '20px', color: '#ef4444', fontFamily: 'monospace',
-                    background: 'rgba(10,12,20,0.95)', minHeight: '100vh',
+                    background: 'rgba(23,19,12,0.98)', minHeight: '100vh',
                     fontSize: '11px', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
                 }}>
                     <b>React Error:</b>{'\n'}{String(this.state.error)}{'\n'}{this.state.error?.stack}

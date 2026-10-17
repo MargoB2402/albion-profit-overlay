@@ -4,3 +4,5 @@ main.obf.js
 preload.obf.js
 .env
 *.7z
+*.log
+*.log.*

@@ -6,8 +6,8 @@ const fmt = n => n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + 'M' : n >= 1_000 
 
 const S = {
     wrap:  { padding: '10px 12px', overflowY: 'auto', flex: 1, minHeight: 0 },
-    input: { width: '100%', padding: '7px 9px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' },
-    label: { fontSize: '10px', color: '#475569', marginBottom: '3px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' },
+    input: { width: '100%', padding: '7px 9px', background: 'rgba(200,160,80,0.06)', border: '1px solid rgba(200,160,80,0.22)', borderRadius: '8px', color: '#f0e8d4', fontSize: '12px', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' },
+    label: { fontSize: '10px', color: '#a39478', marginBottom: '3px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' },
     btn:   { flex: 1, padding: '8px', background: '#c8a050', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' },
 };
 
@@ -87,7 +87,7 @@ export default function SplitWidget({ city }) {
                         flex: 1, padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer',
                         fontWeight: '600', fontSize: '11px',
                         background: mode === m ? 'rgba(200,160,80,0.2)' : 'transparent',
-                        color: mode === m ? '#c8a050' : '#475569',
+                        color: mode === m ? '#c8a050' : '#a39478',
                     }}>{l}</button>
                 ))}
             </div>
@@ -98,7 +98,7 @@ export default function SplitWidget({ city }) {
                     <textarea style={{ ...S.input, height: '80px', resize: 'vertical' }}
                         value={items} onChange={e => setItems(e.target.value)}
                         placeholder={"5 T7 Bloodletter\nT6 Guardian Helmet x2\nT8 Rune Dagger"} />
-                    <div style={{ fontSize: '9px', color: '#475569', marginTop: '3px' }}>{t('splitQtyHint') || 'Кол-во: «5 T7 Меч» или «T7 Меч x5»'}</div>
+                    <div style={{ fontSize: '9px', color: '#a39478', marginTop: '3px' }}>{t('splitQtyHint') || 'Кол-во: «5 T7 Меч» или «T7 Меч x5»'}</div>
                 </div>
             ) : (
                 <div style={{ marginBottom: '8px' }}>
@@ -128,12 +128,12 @@ export default function SplitWidget({ city }) {
                     border: '1px solid rgba(200,160,80,0.2)', borderRadius: '9px', padding: '10px 12px',
                 }}>
                     {result.lines.map((l, i) => (
-                        <div key={i} style={{ fontSize: '11px', color: l.ok === false ? '#ef4444' : '#64748b', marginBottom: '2px' }}>{l.text}</div>
+                        <div key={i} style={{ fontSize: '11px', color: l.ok === false ? '#ef4444' : '#b4a286', marginBottom: '2px' }}>{l.text}</div>
                     ))}
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '8px', paddingTop: '8px' }}>
+                    <div style={{ borderTop: '1px solid rgba(200,160,80,0.06)', marginTop: '8px', paddingTop: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
-                            <span style={{ color: '#475569' }}>{t('afterTaxLabel')} {tax}%</span>
-                            <span style={{ color: '#94a3b8' }}>{fmt(result.afterTax)}</span>
+                            <span style={{ color: '#a39478' }}>{t('afterTaxLabel')} {tax}%</span>
+                            <span style={{ color: '#c6b898' }}>{fmt(result.afterTax)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
                             <span style={{ color: '#c8a050', fontWeight: '700' }}>{players} {t('perPlayer')}</span>

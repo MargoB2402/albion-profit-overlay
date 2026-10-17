@@ -12,6 +12,8 @@
 // месте — все потребители всегда видят одно и то же actual state.
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getLang } from './useI18n.js';
+import { createQuoteQueue } from '../quoteQueue.mjs';
+import { groupMarketOrders } from '../marketOrders.mjs';
 
 const API_BASE = 'https://promptly.sbs';
 
@@ -36,6 +38,9 @@ function useApiState() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isPro, setIsPro]         = useState(false);
     const [isProPlus, setIsProPlus] = useState(false);
+    // Приватный режим. Источник правды — сервер, здесь только отражение: тумблер
+    // есть ещё и на сайте, и расходиться состояниям нельзя.
+    const [privateMode, setPrivateModeState] = useState(false);
     const [isAdmin, setIsAdmin]     = useState(false);
 
     useEffect(() => {
@@ -63,6 +68,15 @@ function useApiState() {
                 setIsPro(data.isPro       || false);
                 setIsProPlus(data.isProPlus  || false);
                 setIsAdmin(data.isAdmin     || false);
+                setPrivateModeState(!!data.privateMode);
+                // Сообщаем main: если значение разошлось с сохранённым, он
+                // перезапустит агента — иначе выгрузка в AODP продолжилась бы
+                // до следующего запуска приложения.
+                // Без проверки необязательный вызов проглотил бы отсутствие моста
+                // молча: режим на сервере включён, агент продолжает слать в AODP,
+                // и никаких следов. Именно так и была пропущена опечатка в имени.
+                if (window.electron?.setPrivateMode) window.electron.setPrivateMode(!!data.privateMode);
+                else console.warn('[useApi] мост setPrivateMode недоступен — агент не узнает о режиме');
             } else {
                 setIsLoggedIn(false);
                 setIsAdmin(false);
@@ -222,50 +236,36 @@ function useApiState() {
 
     // 🎯 АОДП-контрибуция: шлём ТОЧНЫЕ ордера агента (price+quality+is_offer).
     // Группируем по (quality, is_offer): is_offer=false (ЧР/buy) → max, is_offer=true (offer) → min.
-    const contribOrdersCd = useRef({});
-    const contributeOrders = useCallback(async ({ city, itemId, orders }) => {
-        const base   = config.apiBase || API_BASE;
-        const wallet = config.wallet;
-        const token  = config.token;
-        if (!wallet || !token || !window.electron?.signPriceReport) return;
-        if (!city || !itemId || !Array.isArray(orders) || orders.length === 0) return;
-
-        const CITY_MAP = {
-            'Тетфорд': 'Thetford', 'Форт Стерлинг': 'Fort Sterling',
-            'Лимхёрст': 'Lymhurst', 'Бриджвотч': 'Bridgewatch',
-            'Мартлок': 'Martlock', 'Карлеон': 'Caerleon', 'Брецильен': 'Brecilien',
-            'Чёрный рынок': 'Black Market', 'Черный рынок': 'Black Market',
-        };
-        const cityEn = CITY_MAP[city] || city;
-
-        // Группируем по качеству и стороне ордера.
-        // ВАЖНО: агент отдаёт цену в ВНУТРЕННИХ единицах Albion (×10000, 4 знака после запятой).
-        // Реальное серебро = price / 10000.  (417120000 → 41712)
-        const groups = {};
-        for (const o of orders) {
-            const q = Number(o.quality) || 1;
-            const price = Math.round((Number(o.price) || 0) / 10000);
-            if (price < 1) continue; // агент даёт точные цены даже на 4-5 серебра — режем только 0/мусор
-            const side = o.is_offer ? 'sell' : 'buy';
-            const k = `${q}_${side}`;
-            (groups[k] ||= { q, side, prices: [] }).prices.push(price);
-        }
-
-        const now = Date.now();
-        for (const { q, side, prices } of Object.values(groups)) {
-            const price = side === 'buy' ? Math.max(...prices) : Math.min(...prices);
-            const ck = `${itemId}_${cityEn}_${q}_${side}`;
-            if (contribOrdersCd.current[ck] && now - contribOrdersCd.current[ck] < 60_000) continue; // клиентский анти-спам 60с
-            try {
-                const { sig, ts } = await window.electron.signPriceReport({ itemId, city: cityEn, price, quality: q });
-                await apiFetch(`${base}/api/overlay/contribute-price`, {
-                    method: 'POST',
-                    body: { wallet, token, itemId, city: cityEn, price, quality: q, side, sig, ts, region: config.region || 'europe' },
+    const queue = useRef(null);
+    const lastObservation = useRef(0);
+    const [captureStatus, setCaptureStatus] = useState(null);
+    useEffect(() => {
+        if (!config.wallet || !config.token) { setCaptureStatus(null); return; }
+        const current = createQuoteQueue({
+            onStatus: setCaptureStatus,
+            send: async prices => {
+                const region = config.region || 'europe';
+                const privateOnly = privateMode;
+                if (!window.electron?.signPriceBatch) throw Object.assign(new Error('Update required'), { permanent: true });
+                const { sig, ts } = await window.electron.signPriceBatch({ region, privateOnly, prices });
+                const response = await apiFetch(`${config.apiBase || API_BASE}/api/overlay/contribute-prices`, {
+                    method: 'POST', timeoutMs: 10_000,
+                    body: { wallet: config.wallet, token: config.token, region, privateOnly, prices, sig, ts },
                 });
-                contribOrdersCd.current[ck] = now;
-            } catch {}
-        }
-    }, [config]);
+                if (!response?.ok || !Array.isArray(response.results) || response.results.length !== prices.length) {
+                    throw Object.assign(new Error(response?.error || 'Upload failed'), { permanent: ['invalid_batch', 'invalid_signature', 'Unauthorized', 'PRO_PLUS_REQUIRED'].includes(response?.error) });
+                }
+                return response.results;
+            },
+        });
+        queue.current = current; setCaptureStatus(current.status());
+        return () => { current.close(); if (queue.current === current) queue.current = null; };
+    }, [config.wallet, config.token, config.apiBase, config.region, privateMode]);
+    const contributeOrders = useCallback(({ city, orders }) => {
+        const observedAt = Math.max(Date.now(), lastObservation.current + 1);
+        lastObservation.current = observedAt;
+        queue.current?.enqueue(groupMarketOrders({ city, orders }).map(report => ({ ...report, observedAt })));
+    }, []);
 
     // Топ-5 крафта (для CraftWidget)
     const fetchCraftTop = useCallback(async ({ city, toCity = 'Black Market', region = 'europe', tax = 10.5 }) => {
@@ -329,7 +329,30 @@ function useApiState() {
         setIsAdmin(false);
     }, [config]);
 
-    return { config, isLoggedIn, isPro, isProPlus, isAdmin, fetchPrice, saveTrade, fetchAlerts, fetchFavorites, fetchOutbid, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
+    // Переключение из оверлея. Запрос тот же, что и у кнопки на сайте.
+    const togglePrivateMode = useCallback(async (enabled) => {
+        const base = config.apiBase || API_BASE;
+        try {
+            // body передаём ОБЪЕКТОМ: apiFetch сериализует его сам, и в main-процессе,
+            // и в запасном пути. Готовая строка здесь давала двойную сериализацию —
+            // сервер получал строку вместо полей, не находил токен и отвечал отказом.
+            const d = await apiFetch(`${base}/api/account/private-mode`, {
+                method: 'POST',
+                body: { wallet: config.wallet, token: config.token, enabled },
+            });
+            if (d?.success) {
+                setPrivateModeState(!!d.enabled);
+                if (window.electron?.setPrivateMode) await window.electron.setPrivateMode(!!d.enabled);
+                else console.warn('[useApi] мост setPrivateMode недоступен — агент не перезапустится');
+                return { ok: true, enabled: !!d.enabled };
+            }
+            return { ok: false, error: d?.error || 'unknown' };
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    }, [config]);
+
+    return { captureStatus, config, isLoggedIn, isPro, isProPlus, isAdmin, privateMode, togglePrivateMode, fetchPrice, saveTrade, fetchAlerts, fetchFavorites, fetchOutbid, saveConfig, logout, contributePrices, contributeOrders, fetchTransportTop, fetchCraftTop, fetchCraftBreakdown, fetchEnchant, saveCraftLedger };
 }
 
 const ApiContext = createContext(null);

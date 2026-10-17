@@ -1,6 +1,6 @@
 {
   "name": "albion-profit-overlay",
-  "version": "1.5.14",
+  "version": "1.6.2",
   "description": "Albion Profit — Game Overlay",
   "main": "main.js",
   "scripts": {
@@ -24,7 +24,9 @@
       "dist/**",
       "main.obf.js",
       "preload.obf.js",
-      "assets/**"
+      "assets/**",
+      "!**/*.log",
+      "!**/*.log.*"
     ],
     "extraMetadata": {
       "main": "main.obf.js"
