@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
     // Конфиг
     getConfig:  () => ipcRenderer.invoke('get-config'),
+    farmStatus: () => ipcRenderer.invoke('farm-status'),
     saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),
 
     // Управление окном

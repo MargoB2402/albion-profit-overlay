@@ -7,6 +7,7 @@ const https  = require('https');
 const http   = require('http');
 const { execFile } = require('child_process');
 const WebSocket = require('ws');
+const { FarmOutbox } = require('./assets/farm-outbox.cjs');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -303,9 +304,15 @@ function scheduleAgentWsReconnect() {
     }, 5000);
 }
 
+let farmOutbox;
+function getFarmOutbox() {
+    if (!farmOutbox) farmOutbox = new FarmOutbox({ directory: path.join(app.getPath('userData'), 'farming'), config: readConfig, base: API_BASE });
+    return farmOutbox;
+}
 async function handleAgentWsMessage(msg) {
     const { type, payload } = msg || {};
     if (!type || !payload) return;
+    if (type === 'farm_record') { getFarmOutbox().offer(payload); return; }
 
     const { wallet, token } = readConfig();
     if (!wallet || !token) { syncLog('[agent-ws] skip: not logged in to overlay'); return; }
@@ -1060,6 +1067,8 @@ ipcMain.handle('get-config', () => {
         token:   saved.token   || '',
         apiBase: API_BASE,       // Уровень 2: всегда наш домен, не из конфига
         agentWS: saved.agentWS || 'ws://127.0.0.1:9999/ws',
+        farmTracking: saved.farmTracking === true,
+        region: saved.region || 'europe',
     };
 });
 
@@ -1086,6 +1095,9 @@ ipcMain.handle('sign-price-report', async (_, { itemId, city, price, quality }) 
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+    const farmTimer = setInterval(() => { void getFarmOutbox().flush(); }, 5000);
+    farmTimer.unref();
+    ipcMain.handle('farm-status', () => getFarmOutbox().status());
     createOverlay();
     createTray();
     // Npcap может докачиваться/доустанавливаться в фоне (только при первом запуске без него) —
