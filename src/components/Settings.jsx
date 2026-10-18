@@ -42,7 +42,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
     const [farmTracking, setFarmTracking] = useState(config.farmTracking === true);
     const [farmStatus,setFarmStatus]=useState(null);
     useEffect(()=>{let live=true;const read=()=>window.electron?.farmStatus?.().then(value=>{if(live)setFarmStatus(value);}).catch(()=>{});read();const timer=setInterval(read,5000);return()=>{live=false;clearInterval(timer);};},[]);
-    const farmCopy = ({ru:['Учёт островов · бета','Личные наблюдения и история. Просмотр на сайте: PRO / PRO+. После включения зайди на остров.'],en:['Island tracking · beta','Private observations and history. View on the website: PRO / PRO+. Re-enter the island after enabling.'],de:['Inselaufzeichnung · Beta','Private Beobachtungen und Verlauf. Ansicht auf der Website: PRO / PRO+. Insel nach Aktivierung neu betreten.'],es:['Registro de islas · beta','Observaciones e historial privados. Consulta en la web: PRO / PRO+. Vuelve a entrar en la isla al activarlo.']})[lang] || ['Island tracking · beta','Private observations and history. View on the website: PRO / PRO+.'];
+    const farmCopy = ({ru:['Учёт островов · бета','Личные наблюдения и история. Просмотр на сайте: PRO+. После включения зайди на остров.'],en:['Island tracking · beta','Private observations and history. View on the website: PRO+. Re-enter the island after enabling.'],de:['Inselaufzeichnung · Beta','Private Beobachtungen und Verlauf. Ansicht auf der Website: PRO+. Insel nach Aktivierung neu betreten.'],es:['Registro de islas · beta','Observaciones e historial privados. Consulta en la web: PRO+. Vuelve a entrar en la isla al activarlo.']})[lang] || ['Island tracking · beta','Private observations and history. View on the website: PRO+.'];
     const [region,  setRegion]  = useState(config.region       || 'europe');
     const [saved,     setSaved]     = useState(false);
 
@@ -70,7 +70,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
             wallet:          wallet.trim(),
             token:           token.trim(),
             autoLogTrade:    autoLog,
-            farmTracking,
+            farmTracking: isProPlus && farmTracking,
             region:          region,
             filterMaxAge:    Number(maxAge),
             filterMinDaily:  Number(minDaily),
@@ -216,7 +216,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
 
             <label style={{ ...S.toggle, minHeight:44, gap:12, cursor:'pointer' }}>
                 <span><strong>{farmCopy[0]}</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{farmCopy[1]}</span></span>
-                <input type="checkbox" checked={farmTracking} onChange={e=>setFarmTracking(e.target.checked)} style={{width:22,height:22,flexShrink:0}} />
+                <input type="checkbox" checked={farmTracking} disabled={!isProPlus && !farmTracking} onChange={e=>setFarmTracking(e.target.checked)} style={{width:22,height:22,flexShrink:0}} />
             </label>
             {farmTracking&&farmStatus&&<p style={{fontSize:11,marginBottom:12,color:farmStatus.error?'#f59e0b':'#a39478'}}>{({ru:'Очередь островов',en:'Island queue',de:'Insel-Warteschlange',es:'Cola de islas'})[lang]||'Island queue'}: {farmStatus.pending}{farmStatus.error?' · '+farmStatus.error:''}</p>}
             {autoLog && !agentLocationKnown && (
