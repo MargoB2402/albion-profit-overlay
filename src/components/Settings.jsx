@@ -1,3 +1,5 @@
+import {lootDiagnostics} from '../lootDiagnostics';
+import {lootLocales} from '../locales/lootLogger.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useI18n, LANG_OPTIONS, setLang } from '../hooks/useI18n';
 
@@ -39,6 +41,12 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
     const [wallet,  setWallet]  = useState(config.wallet       || '');
     const [token,   setToken]   = useState(config.token        || '');
     const [autoLog, setAutoLog] = useState(config.autoLogTrade || false);
+    const [lootTracking,setLootTracking]=useState(config.lootTracking===true);
+    const [lootStatus,setLootStatus]=useState(null);
+    const [lootSaving,setLootSaving]=useState(false),[lootError,setLootError]=useState(false);
+    useEffect(()=>setLootTracking(config.lootTracking===true),[config.lootTracking]);
+    useEffect(()=>{const tick=()=>window.electron?.lootStatus?.().then(setLootStatus);tick();const timer=setInterval(tick,5000);return()=>clearInterval(timer);},[]);
+    const lootCopy=lootLocales[lang]||lootLocales.en;
     const [farmTracking, setFarmTracking] = useState(config.farmTracking === true);
     const [farmStatus,setFarmStatus]=useState(null);
     useEffect(()=>{let live=true;const read=()=>window.electron?.farmStatus?.().then(value=>{if(live)setFarmStatus(value);}).catch(()=>{});read();const timer=setInterval(read,5000);return()=>{live=false;clearInterval(timer);};},[]);
@@ -65,12 +73,13 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
     const [minDaily,  setMinDaily]  = useState(config.filterMinDaily  ?? 7);
     const [maxMargin, setMaxMargin] = useState(config.filterMaxMargin ?? 100);
 
-    const handleSave = () => {
-        saveConfig({
+    const handleSave = async () => {
+        try{await saveConfig({
             wallet:          wallet.trim(),
             token:           token.trim(),
             autoLogTrade:    autoLog,
             farmTracking: isProPlus && farmTracking,
+            lootTracking:(isPro||isProPlus)&&lootTracking,
             region:          region,
             filterMaxAge:    Number(maxAge),
             filterMinDaily:  Number(minDaily),
@@ -78,6 +87,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
+        }catch{setLootError(true);}
     };
 
     const handleLogout = () => {
@@ -218,6 +228,9 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
                 <span><strong>{farmCopy[0]}</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{farmCopy[1]}</span></span>
                 <input type="checkbox" checked={farmTracking} disabled={!isProPlus && !farmTracking} onChange={e=>setFarmTracking(e.target.checked)} style={{width:22,height:22,flexShrink:0}} />
             </label>
+            <div style={{display:'grid',gap:12,marginTop:12}}><span><strong>{lootCopy.tab} · PRO / PRO+</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{lootCopy.setup}</span></span><button type="button" data-loot-session disabled={lootSaving||(!lootTracking&&!isPro&&!isProPlus)} style={{...S.btn,minHeight:44,margin:0}} onClick={async()=>{setLootSaving(true);setLootError(false);try{await saveConfig({wallet:wallet.trim(),token:token.trim(),region,lootTracking:!lootTracking});setLootTracking(!lootTracking);}catch{setLootError(true);}finally{setLootSaving(false);}}}>{lootSaving?lootCopy.busy:lootTracking?lootCopy.endSession:lootCopy.startSession}</button></div>
+            <p style={{fontSize:11,lineHeight:1.6}}>{lootCopy.sessionHint}</p>{lootError&&<p role="alert">{lootCopy.error}</p>}
+            {lootTracking&&lootStatus&&<div style={{fontSize:11,lineHeight:1.6}}><p>{(lootDiagnostics[lang]||lootDiagnostics.en)[2]}: {lootStatus.received||0} · {(lootDiagnostics[lang]||lootDiagnostics.en)[3]}: {lootStatus.sent||0} · {(lootDiagnostics[lang]||lootDiagnostics.en)[4]}: {lootStatus.pending}</p><p>{(lootDiagnostics[lang]||lootDiagnostics.en)[5]}: {lootStatus.rejected||0}{lootStatus.awaiting>0?' · '+(lootDiagnostics[lang]||lootDiagnostics.en)[6]+': '+lootStatus.awaiting:''}{lootStatus.error?' · '+lootStatus.error:''}</p><p>{lootStatus.capture?.ready?`${(lootDiagnostics[lang]||lootDiagnostics.en)[0]}: ${lootStatus.capture.silverEvents+lootStatus.capture.itemEvents}`:(lootDiagnostics[lang]||lootDiagnostics.en)[1]}{lootStatus.capture?.reason?' · '+lootStatus.capture.reason:''}</p></div>}
             {farmTracking&&farmStatus&&<p style={{fontSize:11,marginBottom:12,color:farmStatus.error?'#f59e0b':'#a39478'}}>{({ru:'Очередь островов',en:'Island queue',de:'Insel-Warteschlange',es:'Cola de islas'})[lang]||'Island queue'}: {farmStatus.pending}{farmStatus.error?' · '+farmStatus.error:''}</p>}
             {autoLog && !agentLocationKnown && (
                 <div style={{ ...S.warning, marginBottom: '10px' }}>

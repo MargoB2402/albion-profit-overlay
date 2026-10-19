@@ -8,6 +8,8 @@ const http   = require('http');
 const { execFile } = require('child_process');
 const WebSocket = require('ws');
 const { FarmOutbox } = require('./assets/farm-outbox.cjs');
+const { LootOutbox } = require('./assets/loot-outbox.cjs');
+const { withLootSession } = require('./assets/loot-session.cjs');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -304,6 +306,9 @@ function scheduleAgentWsReconnect() {
     }, 5000);
 }
 
+let lootOutbox;
+let lootCaptureStatus=null;
+function getLootOutbox(){if(!lootOutbox)lootOutbox=new LootOutbox({directory:path.join(app.getPath('userData'),'loot'),config:readConfig,base:API_BASE,log:message=>syncLog('[loot]',message)});return lootOutbox;}
 let farmOutbox;
 function getFarmOutbox() {
     if (!farmOutbox) farmOutbox = new FarmOutbox({ directory: path.join(app.getPath('userData'), 'farming'), config: readConfig, base: API_BASE });
@@ -312,6 +317,8 @@ function getFarmOutbox() {
 async function handleAgentWsMessage(msg) {
     const { type, payload } = msg || {};
     if (!type || !payload) return;
+    if(type==='loot_capture_status'){const reason=typeof payload.reason==='string'&&/^[A-Z_]{0,64}$/.test(payload.reason)?payload.reason:'';if(reason!==lootCaptureStatus?.reason)syncLog('[loot] capture state:',reason||'ready');lootCaptureStatus={reason,ready:payload.ready===true,silverEvents:Number(payload.silverEvents)||0,itemEvents:Number(payload.itemEvents)||0,recorded:Number(payload.recorded)||0,at:Date.now()};return;}
+    if(type==='loot_record'){await getLootOutbox().offer(payload);return;}
     if (type === 'farm_record') { getFarmOutbox().offer(payload); return; }
 
     const { wallet, token } = readConfig();
@@ -1068,6 +1075,8 @@ ipcMain.handle('get-config', () => {
         apiBase: API_BASE,       // Уровень 2: всегда наш домен, не из конфига
         agentWS: saved.agentWS || 'ws://127.0.0.1:9999/ws',
         farmTracking: saved.farmTracking === true,
+        lootTracking:saved.lootTracking===true,
+        lootSessionId:saved.lootSessionId,lootSessionStartedAt:saved.lootSessionStartedAt,
         region: saved.region || 'europe',
     };
 });
@@ -1075,7 +1084,7 @@ ipcMain.handle('get-config', () => {
 ipcMain.handle('save-config', (_, config) => {
     const current = readConfig();
     const { apiBase: _ignored, ...safe } = config; // apiBase не сохраняем
-    return writeConfig({ ...current, ...safe });
+    return writeConfig(withLootSession(current,safe));
 });
 
 ipcMain.handle('sign-price-batch', async (_, { region, privateOnly, prices }) => {
@@ -1097,6 +1106,8 @@ ipcMain.handle('sign-price-report', async (_, { itemId, city, price, quality }) 
 app.whenReady().then(async () => {
     const farmTimer = setInterval(() => { void getFarmOutbox().flush(); }, 5000);
     farmTimer.unref();
+    const lootTimer=setInterval(()=>{void getLootOutbox().flush();},5000);lootTimer.unref();
+    ipcMain.handle("loot-status",()=>({...getLootOutbox().status(),capture:lootCaptureStatus}));
     ipcMain.handle('farm-status', () => getFarmOutbox().status());
     createOverlay();
     createTray();

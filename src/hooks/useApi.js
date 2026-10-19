@@ -312,10 +312,11 @@ function useApiState() {
         });
     }, [config]);
 
-    const saveConfig = useCallback((newCfg) => {
+    const saveConfig = useCallback(async (newCfg) => {
         const merged = { ...config, ...newCfg };
+        const saved = await window.electron?.saveConfig(merged);
+        if(saved===false)throw Error("CONFIG_SAVE_FAILED");
         setConfig(merged);
-        window.electron?.saveConfig(merged);
         verifySession(merged);
     }, [config, verifySession]);
 

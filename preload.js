@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
     // Конфиг
     getConfig:  () => ipcRenderer.invoke('get-config'),
+    lootStatus:()=>ipcRenderer.invoke('loot-status'),
     farmStatus: () => ipcRenderer.invoke('farm-status'),
     saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),
 
