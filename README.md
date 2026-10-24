@@ -1,5 +1,15 @@
 # albion-profit-overlay
 
+## Windows 1.10.0 — Gathering and fishing
+
+[Download the Windows installer](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.0).
+
+The free **Gather** tab records local sessions, groups harvested resources and fish, and compares selling estimates across seven cities. Choose instant sale or a sell order, set fees and a freshness limit, and expand an item to see its observation history.
+
+Price estimates require the updated website API. Unknown prices are not zero; an estimate does not guarantee order depth or sale completion. Live verification of the new capture remains in beta. Existing Loot Tracker gates are unchanged. See [release notes](CHANGELOG.md).
+
+New closed application implementation is distributed in protected installers; private source and obfuscation mappings are not added to this repository. Historical sources remain in Git history. Modified open-source agent sources and notices accompany the release.
+
 ## 1.9.6 — VPN adapter discovery and support diagnostics
 
 Windows capture now opens all Npcap-visible adapters, rediscovers devices after VPN/network changes and retries unavailable interfaces. Shared processing suppresses cross-adapter duplicates. The overlay displays capture status and packet/decoder counters.
