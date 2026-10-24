@@ -240,7 +240,7 @@ export default function CraftWidget({ city }) {
                             <span style={{ fontSize: '15px', color: '#22c55e', fontWeight: '900' }}>{fmt(totalNet + (recipe.fee || 0) * ops)}</span>
                         </div>
 
-                        {/* Ledger button — PRO+ only */}
+                        {/* Ledger button — ULTRA only */}
                         {isProPlus ? (
                             <button onClick={sendToLedger} disabled={ledgerLoading || ledgerDone} style={{ ...SI.btn, width: '100%', marginTop: '8px', background: ledgerDone ? '#22c55e' : '#3b82f6', fontSize: '11px' }}>
                                 {ledgerDone ? t('craftLedgerDone') : ledgerLoading ? t('loading') : t('craftSendLedger')}

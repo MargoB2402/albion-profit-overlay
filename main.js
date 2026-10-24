@@ -9,9 +9,22 @@ const { execFile } = require('child_process');
 const WebSocket = require('ws');
 const { FarmOutbox } = require('./assets/farm-outbox.cjs');
 const { LootOutbox } = require('./assets/loot-outbox.cjs');
+const { HistoryOutbox } = require('./assets/history-outbox.cjs');
 const { withLootSession } = require('./assets/loot-session.cjs');
+const { Diagnostics, crashDetails } = require('./assets/diagnostics.cjs');
 
 const isDev = process.env.NODE_ENV === 'development';
+
+// Вторая копия оверлея поднимает второго агента, тот не может занять порт
+// 9999 — и обе копии остаются без цен и без локации, молча. Держим ровно
+// один экземпляр: повторный запуск просто показывает уже открытое окно.
+if (!isDev && !app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+}
+app.on('second-instance', () => {
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+});
 
 // ── Уровень 1: API URL собирается из частей — не хранится как строка ──────────
 const _h = ['prompt', 'ly', '.sbs'].join('');
@@ -27,6 +40,12 @@ function syncLog(...args) {
     const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}\n`;
     console.log(...args);
     try { fs.appendFileSync(SYNC_LOG_PATH, line); } catch {}
+    // Local text logs stay local; only fixed codes are eligible for remote diagnostics.
+    if(args[0]==='[loot]'||args[0]==='[history]'){
+        const text=String(args[1]||'');
+        if(/storage|disk|full/i.test(text))diagnostics().state('loot','storage_error');
+        else if(/fail|error|HTTP_[45]/i.test(text))diagnostics().state('upload','upload_failed');
+    }
 }
 
 // ── Уровень 3: Device Fingerprint ─────────────────────────────────────────────
@@ -49,6 +68,15 @@ function getDeviceFingerprint() {
     }
 }
 const DEVICE_FP = getDeviceFingerprint();
+let supportDiagnostics, captureStartedAt=Date.now(), latestCapture=null, supportSessionReported=false;
+function diagnostics(){
+ if(!supportDiagnostics)supportDiagnostics=new Diagnostics({directory:app.getPath('userData'),config:readConfig,
+  metadata:()=>{const memory=process.memoryUsage();return{platform:'windows',version:app.getVersion(),osVersion:os.release(),engine:'npcap',flags:{npcapPresent:fs.existsSync(PCAP_API_DLL),lootEnabled:readConfig().lootTracking===true},runtime:{arch:process.arch,rssMiB:Math.round(memory.rss/1048576),heapMiB:Math.round(memory.heapUsed/1048576)}};},
+  send:async(cfg,report)=>{const res=await fetch(API_BASE+'/api/overlay/diagnostics',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+cfg.token},body:JSON.stringify({wallet:cfg.wallet,report}),signal:AbortSignal.timeout(10000)});return res.ok?res.json():{ok:false};}});
+ return supportDiagnostics;
+}
+process.on('uncaughtExceptionMonitor',error=>{diagnostics().event('app_crash','app',{},crashDetails(error));});
+app.on('render-process-gone',()=>{diagnostics().event('renderer_crash');});
 
 // ── Уровень 2: Проверка целостности asar ──────────────────────────────────────
 async function verifyBuildIntegrity(wallet, token) {
@@ -139,6 +167,9 @@ let agentProc  = null;
 // Установка драйвера требует прав администратора — через Start-Process -Verb RunAs
 // Windows покажет один стандартный UAC-запрос при самой первой установке.
 const NPCAP_MARKER_DIR = 'C:\\Windows\\System32\\Npcap';
+// Именно её грузит агент. Папка Npcap есть и без режима совместимости, а эта
+// библиотека — только с ним, поэтому проверяем её, а не папку.
+const PCAP_API_DLL = 'C:\\Windows\\System32\\wpcap.dll';
 
 function downloadFile(url, destPath, redirectsLeft = 5) {
     return new Promise((resolve, reject) => {
@@ -167,36 +198,117 @@ function downloadFile(url, destPath, redirectsLeft = 5) {
     });
 }
 
+// Постоянной ссылки «последняя версия» у npcap.com нет: npcap-latest.exe
+// отдаёт 404, в каталоге лежат только версионные файлы. Поэтому читаем список
+// и берём старшую версию, а если каталог недоступен — ставим ту, что заведомо
+// существует на момент сборки.
+const NPCAP_FALLBACK_URL = 'https://npcap.com/dist/npcap-1.89.exe';
+
+async function resolveNpcapInstallerUrl() {
+    try {
+        const listing = await new Promise((resolve, reject) => {
+            https.get('https://npcap.com/dist/', res => {
+                if (res.statusCode !== 200) { res.resume(); reject(new Error('HTTP ' + res.statusCode)); return; }
+                let body = '';
+                res.setEncoding('utf8');
+                res.on('data', chunk => { body += chunk; if (body.length > 2e6) res.destroy(); });
+                res.on('end', () => resolve(body));
+            }).on('error', reject).setTimeout(15000, function () { this.destroy(new Error('timeout')); });
+        });
+        const versions = [...new Set(listing.match(/npcap-\d+\.\d+\.exe/g) || [])];
+        if (!versions.length) throw new Error('в каталоге нет установщиков');
+        const weight = name => name.split('-')[1].split('.').slice(0, 2).reduce((acc, part) => acc * 1000 + Number(part), 0);
+        const newest = versions.sort((a, b) => weight(b) - weight(a))[0];
+        return 'https://npcap.com/dist/' + newest;
+    } catch (e) {
+        syncLog('[npcap] не удалось прочитать каталог версий:', e.message, '— ставим', NPCAP_FALLBACK_URL);
+        return NPCAP_FALLBACK_URL;
+    }
+}
+
 async function ensureNpcap() {
-    if (fs.existsSync(NPCAP_MARKER_DIR)) {
-        syncLog('[npcap] already installed');
+    if (fs.existsSync(PCAP_API_DLL)) {
+        syncLog('[npcap] already installed (wpcap.dll present)');
         return true;
     }
-    syncLog('[npcap] not found, downloading official installer from npcap.com...');
-    const installerPath = path.join(os.tmpdir(), 'npcap-installer.exe');
-    try {
-        await downloadFile('https://npcap.com/dist/npcap-latest.exe', installerPath);
-    } catch (e) {
-        syncLog('[npcap] download failed:', e.message);
+    if (fs.existsSync(NPCAP_MARKER_DIR)) {
+        // Самый неприятный случай: всё «установлено», а захвата нет и никакой
+        // ошибки не видно. Пишем об этом прямо — иначе лог выглядит здоровым.
+        syncLog('[npcap] установлен БЕЗ режима совместимости с WinPcap — агент не сможет захватывать трафик, переустанавливаем через мастер');
+    }
+    // Тихая установка (/S) — возможность платной сборки Npcap OEM. Бесплатный
+    // установщик её не поддерживает и просто выходит с кодом 2, ничего не
+    // поставив: ровно это мы и видели в логах у людей раз за разом, а оверлей
+    // потом молча работал без захвата. Поэтому ведём человека через мастер.
+    const consent = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Albion Profit Overlay — Npcap',
+        message: 'Нужен Npcap / Npcap is required',
+        detail: 'Без него оверлей не видит рыночные цены: это драйвер захвата, которым пользуются Wireshark и Nmap.\n\n'
+            + 'Сейчас откроется установщик. Подтвердите запрос Windows и ОБЯЗАТЕЛЬНО оставьте галочку '
+            + '«Install Npcap in WinPcap API-compatible Mode» — без неё захват не заработает.\n\n'
+            + 'Npcap is the capture driver used by Wireshark and Nmap. Confirm the Windows prompt and KEEP the '
+            + '"Install Npcap in WinPcap API-compatible Mode" checkbox ticked — capture will not work without it.',
+        buttons: ['Установить / Install', 'Не сейчас / Later'],
+        defaultId: 0,
+        cancelId: 1,
+    }).catch(() => ({ response: 0 }));
+    if (consent.response !== 0) {
+        syncLog('[npcap] человек отложил установку — захвата не будет');
         return false;
     }
-    syncLog('[npcap] downloaded, launching silent install (will show one UAC prompt)...');
+
+    const installerUrl = await resolveNpcapInstallerUrl();
+    syncLog('[npcap] not found, downloading official installer:', installerUrl);
+    const installerPath = path.join(os.tmpdir(), 'npcap-installer.exe');
+    try {
+        await downloadFile(installerUrl, installerPath);
+    } catch (e) {
+        syncLog('[npcap] download failed:', e.message);
+        await npcapManualFallback('скачать установщик не удалось: ' + e.message);
+        return false;
+    }
+    syncLog('[npcap] downloaded, launching interactive install (UAC + мастер)...');
     // -Verb RunAs через отдельный powershell — обычный spawn() НЕ триггерит UAC для
     // процессов с requireAdministrator в манифесте, он просто падает с ERROR_ELEVATION_REQUIRED.
     const escapedPath = installerPath.replace(/'/g, "''");
-    const psCommand = `try { $p = Start-Process -FilePath '${escapedPath}' -ArgumentList '/S','/winpcap_mode=yes' -Verb RunAs -Wait -PassThru; Write-Output "EXIT:$($p.ExitCode)" } catch { Write-Output "ERROR:$($_.Exception.Message)" }`;
+    const psCommand = `try { $p = Start-Process -FilePath '${escapedPath}' -Verb RunAs -Wait -PassThru; Write-Output "EXIT:$($p.ExitCode)" } catch { Write-Output "ERROR:$($_.Exception.Message)" }`;
     const result = await new Promise((resolve) => {
+        // Человек кликает мастер сам — две минуты ему мало, ждём до десяти.
         execFile('powershell.exe',
             ['-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psCommand],
-            { timeout: 120000 },
+            { timeout: 600000 },
             (_err, stdout) => resolve((stdout || '').trim())
         );
     });
     syncLog('[npcap] installer result:', result || '(empty)');
     try { fs.unlinkSync(installerPath); } catch {}
-    const ok = fs.existsSync(NPCAP_MARKER_DIR);
-    syncLog(ok ? '[npcap] install confirmed' : '[npcap] still not detected after install attempt');
+    // Код выхода у Npcap ненадёжен даже при успехе — верим только самой библиотеке.
+    const ok = fs.existsSync(PCAP_API_DLL);
+    syncLog(ok ? '[npcap] install confirmed (wpcap.dll present)' : '[npcap] wpcap.dll отсутствует даже после установки — захват работать не будет');
+    if (!ok) await npcapManualFallback('установка не завершилась или галочка WinPcap-режима была снята');
     return ok;
+}
+
+// Установка не удалась — это конец всей цепочки данных, и молчать здесь нельзя:
+// окно открыто, ошибок нет, цен не будет никогда.
+async function npcapManualFallback(reason) {
+    syncLog('[npcap] ручная установка:', reason);
+    const choice = await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Albion Profit Overlay — Npcap',
+        message: 'Npcap не установлен — цен не будет',
+        detail: 'Поставьте его вручную с npcap.com, в мастере оставьте галочку '
+            + '«Install Npcap in WinPcap API-compatible Mode», затем перезапустите оверлей.\n\n'
+            + 'Install Npcap manually from npcap.com, keep the "WinPcap API-compatible Mode" checkbox ticked '
+            + 'and restart the overlay.',
+        buttons: ['Открыть npcap.com', 'Закрыть'],
+        defaultId: 0,
+        cancelId: 1,
+    }).catch(() => ({ response: 1 }));
+    if (choice.response === 0) {
+        try { require('electron').shell.openExternal('https://npcap.com/#download'); } catch { /* не открылось */ }
+    }
 }
 
 // ── Auto-launch AODP agent ────────────────────────────────────────────────────
@@ -214,22 +326,127 @@ function agentArgs() {
     return priv ? ['-i', ''] : [];
 }
 
+// Порт 9999 занят кем-то ещё — предупреждаем один раз за сессию, иначе
+// агент повторит жалобу на каждом перезапуске и завалит человека окнами.
+let portBusyWarned = false;
+function warnPortBusy() {
+    if (portBusyWarned) return;
+    portBusyWarned = true;
+    dialog.showMessageBox({
+        type: 'warning',
+        title: 'Albion Profit Overlay',
+        message: 'Порт 9999 занят другой программой',
+        detail: 'Пока порт занят, оверлей не получит ни цен, ни смены локации.\n\n'
+            + 'Закройте вторую копию оверлея или старый albiondata-client и запустите приложение заново. '
+            + 'Посмотреть, кто держит порт: netstat -ano | findstr :9999',
+        buttons: ['Понятно'],
+    }).catch(() => {});
+}
+
+// Сколько раз подряд агент падал — для авто-перезапуска ниже.
+let agentRestarts = 0;
+// Мы сами его остановили (смена режима, выход): такой выход не падение, и
+// поднимать процесс заново здесь нельзя — об этом позаботится тот, кто убивал.
+let agentStoppedByUs = false;
+
+function stopAgent() {
+    agentStoppedByUs = true;
+    try { agentProc?.kill(); } catch { /* уже мёртв */ }
+    agentProc = null;
+}
+
+// Агент, осиротевший после падения оверлея, продолжает держать порт 9999: новый
+// занять его уже не может и остаётся без локального WS — в логе одна строка
+// «Overlay WS не смог занять порт 9999», а дальше тишина и ни одной цены.
+// Поэтому перед стартом снимаем чужие agent.exe, запущенные из НАШЕЙ папки —
+// сверяем полный путь, а не имя: «agent.exe» зовётся половина служебного софта.
+function killOrphanAgents(agentPath, done) {
+    if (process.platform !== 'win32') { done(); return; }
+    const quoted = agentPath.replace(/'/g, "''");
+    // Второе условие — на случай, когда осиротевший агент остался от прошлой
+    // версии, поставленной в другую папку: путь уже не совпадёт с нынешним, а
+    // порт он держит точно так же. Шаблон узкий (имя продукта плюс раскладка
+    // asarUnpack), чтобы не задеть служебный agent.exe чужой программы.
+    const script = `Get-CimInstance Win32_Process -Filter "Name='agent.exe'" `
+        + `| Where-Object { $_.ExecutablePath -eq '${quoted}' `
+        + `-or $_.ExecutablePath -like '*Albion Profit*\\app.asar.unpacked\\assets\\agent.exe' } `
+        + `| ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }`;
+    let finished = false;
+    // Уборка не вправе задерживать запуск: через 4 секунды идём дальше в любом случае.
+    const finish = () => { if (finished) return; finished = true; clearTimeout(guard); done(); };
+    const guard = setTimeout(() => {
+        syncLog('[agent] уборка осиротевших процессов затянулась — запускаю не дожидаясь');
+        finish();
+    }, 8000);
+    try {
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+            { windowsHide: true }, (err, stdout) => {
+                const killed = String(stdout || '').trim().split(/\s+/).filter(Boolean);
+                if (killed.length) syncLog('[agent] снят осиротевший агент с прошлого запуска, pid:', killed.join(', '));
+                else if (err) syncLog('[agent] не удалось проверить осиротевшие процессы:', err.message);
+                finish();
+            });
+    } catch (e) {
+        syncLog('[agent] проверка осиротевших процессов не запустилась:', e.message);
+        finish();
+    }
+}
+
+// Осиротевший агент — случай редкий, а холодный старт PowerShell стоит
+// несколько секунд, и платить их при каждом нормальном запуске незачем: всё это
+// время человек сидит без цен. Поэтому сперва спрашиваем сам порт — если на нём
+// никто не отвечает, убирать нечего и агент стартует сразу.
+function withOrphansCleared(agentPath, done) {
+    const probe = new AbortController();
+    const timer = setTimeout(() => probe.abort(), 1500);
+    fetch('http://127.0.0.1:9999/health', { signal: probe.signal })
+        .then(() => {
+            clearTimeout(timer);
+            syncLog('[agent] порт 9999 уже занят — ищу агента, осиротевшего в прошлый раз');
+            killOrphanAgents(agentPath, done);
+        })
+        .catch(() => { clearTimeout(timer); done(); });
+}
+
+// Пока идёт уборка, повторный вызов не должен плодить вторые процессы.
+let agentLaunchPending = false;
+
 function launchAgent() {
     if (isDev) return; // в dev-режиме агент запускается вручную
+    // asarUnpack кладёт файл в resources/app.asar.unpacked/assets/agent.exe
+    const agentPath = path.join(
+        process.resourcesPath,
+        'app.asar.unpacked', 'assets', 'agent.exe'
+    );
+    if (!fs.existsSync(agentPath)) {
+        console.warn('[agent] agent.exe not found at', agentPath);
+        return;
+    }
+    // Второй живой агент порт 9999 занять не сможет и будет висеть молча,
+    // поэтому перед запуском убеждаемся, что прежний завершён.
+    if (agentProc && !agentProc.killed) {
+        syncLog('[agent] предыдущий процесс ещё жив — останавливаем перед запуском');
+        stopAgent();
+    }
+    if (agentLaunchPending) { syncLog('[agent] запуск уже идёт — повторный вызов пропущен'); return; }
+    agentLaunchPending = true;
+    withOrphansCleared(agentPath, () => {
+        agentLaunchPending = false;
+        spawnAgent(agentPath);
+    });
+}
+
+function spawnAgent(agentPath) {
     try {
-        // asarUnpack кладёт файл в resources/app.asar.unpacked/assets/agent.exe
-        const agentPath = path.join(
-            process.resourcesPath,
-            'app.asar.unpacked', 'assets', 'agent.exe'
-        );
-        if (!fs.existsSync(agentPath)) {
-            console.warn('[agent] agent.exe not found at', agentPath);
-            return;
-        }
+        agentStoppedByUs = false;
         const args = agentArgs();
         agentProc = require('child_process').spawn(agentPath, args, {
             detached: false,
-            stdio:    ['ignore', 'ignore', 'pipe'],
+            // stdout раньше игнорировался, а агент пишет туда разбор письма
+            // вместе с сырым LocationId. Без этой строки «город = unknown» не
+            // расследовать: в оверлей приезжает уже сопоставленное название, и
+            // непонятно, какой именно id игра прислала.
+            stdio:    ['ignore', 'pipe', 'pipe'],
             windowsHide: true,
         });
         // Пишем режим ВСЕГДА, а не только когда он включён: в логе должно быть
@@ -242,11 +459,48 @@ function launchAgent() {
         // причина терялась безвозвратно, было видно только "exited with code 2" без деталей.
         let stderrBuf = '';
         agentProc.stderr.on('data', chunk => { stderrBuf += chunk.toString(); });
-        agentProc.on('error', e => syncLog('[agent] launch error:', e.message));
+        // Из stdout берём разбор рыночных писем и жалобы на захват — остальное
+        // агент пишет многословно и засыпало бы лог.
+        const WORTH_LOGGING = /\[capture\]|\[OVERLAY\]|Failed to open capture device|Failed to set BPF|network interface|не смог занять порт/;
+        let stdoutTail = '';
+        agentProc.stdout.on('data', chunk => {
+            stdoutTail += chunk.toString();
+            const lines = stdoutTail.split('\n');
+            stdoutTail = lines.pop() || '';
+            for (const line of lines) {
+                if (!WORTH_LOGGING.test(line)) continue;
+                syncLog('[agent]', line.trim());
+                if(/\[capture\] Cannot open/.test(line))diagnostics().state('pcap','pcap_open_failed');
+                else if(/\[capture\] Cannot filter/.test(line))diagnostics().state('pcap','pcap_filter_failed');
+                else if(/\[capture\] Device stopped/.test(line))diagnostics().state('pcap','pcap_read_failed');
+                // Без этого занятый порт выглядит как «оверлей просто не работает»:
+                // окно открыто, ошибок нет, данных нет. Говорим прямо.
+                if (/не смог занять порт/.test(line)) warnPortBusy();
+            }
+            if (stdoutTail.length > 8192) stdoutTail = '';
+        });
+        agentProc.on('error', e => {diagnostics().event('agent_launch_failed');syncLog('[agent] launch error:', e.message);});
         agentProc.on('exit',  c => {
             syncLog('[agent] exited with code', c);
+            if(c!==0)diagnostics().event('agent_exit','capture',{exitCode:Number.isSafeInteger(c)&&c>=0?c:0});
             if (c !== 0 && stderrBuf.trim()) syncLog('[agent] stderr:', stderrBuf.trim());
+            agentProc = null;
+            // Упавший агент раньше не поднимался до перезапуска приложения, и
+            // почта переставала приезжать совсем (panic в WS ронял процесс
+            // посреди сессии). Поднимаем сами, но с ограничением: если агент
+            // падает сразу после старта, бесконечный цикл перезапусков хуже
+            // тишины — после пяти попыток подряд останавливаемся и пишем об этом.
+            if (agentStoppedByUs) { agentStoppedByUs = false; return; }
+            if (c === 0 || agentRestarts >= 5) {
+                if (agentRestarts >= 5) syncLog('[agent] пять падений подряд — больше не перезапускаю, нужен ручной рестарт оверлея');
+                return;
+            }
+            agentRestarts++;
+            syncLog('[agent] перезапуск через 5с, попытка', agentRestarts);
+            setTimeout(launchAgent, 5000);
         });
+        // Пережил минуту — считаем запуск удачным, счётчик падений обнуляем.
+        setTimeout(() => { if (agentProc) agentRestarts = 0; }, 60000);
         syncLog('[agent] launched, pid:', agentProc.pid);
     } catch (e) {
         console.error('[agent] failed to launch:', e.message);
@@ -307,6 +561,8 @@ function scheduleAgentWsReconnect() {
 }
 
 let lootOutbox;
+let historyOutbox;
+function getHistoryOutbox(){if(!historyOutbox)historyOutbox=new HistoryOutbox({directory:path.join(app.getPath('userData'),'market-history'),config:readConfig,base:API_BASE,reportKey:OVERLAY_REPORT_KEY,log:message=>syncLog('[history]',message)});return historyOutbox;}
 let lootCaptureStatus=null;
 function getLootOutbox(){if(!lootOutbox)lootOutbox=new LootOutbox({directory:path.join(app.getPath('userData'),'loot'),config:readConfig,base:API_BASE,log:message=>syncLog('[loot]',message)});return lootOutbox;}
 let farmOutbox;
@@ -317,6 +573,12 @@ function getFarmOutbox() {
 async function handleAgentWsMessage(msg) {
     const { type, payload } = msg || {};
     if (!type || !payload) return;
+    if(type==='capture_status'){
+        latestCapture=payload;
+        if(payload.state==='receiving'||Date.now()-captureStartedAt>60000)diagnostics().state('capture',payload.state,payload);
+        return;
+    }
+    if(type==='market_history'){getHistoryOutbox().offer(payload);return;}
     if(type==='loot_capture_status'){const reason=typeof payload.reason==='string'&&/^[A-Z_]{0,64}$/.test(payload.reason)?payload.reason:'';if(reason!==lootCaptureStatus?.reason)syncLog('[loot] capture state:',reason||'ready');lootCaptureStatus={reason,ready:payload.ready===true,silverEvents:Number(payload.silverEvents)||0,itemEvents:Number(payload.itemEvents)||0,recorded:Number(payload.recorded)||0,at:Date.now()};return;}
     if(type==='loot_record'){await getLootOutbox().offer(payload);return;}
     if (type === 'farm_record') { getFarmOutbox().offer(payload); return; }
@@ -956,6 +1218,9 @@ ipcMain.handle('api-fetch', async (_, { url, method = 'GET', body = null, header
             let data = '';
             res.on('data', chunk => { data += chunk; });
             res.on('end', () => {
+                if(['/api/overlay/contribute-prices','/api/overlay/contribute-price','/api/overlay/history','/api/loot/records'].includes(parsed.pathname)){
+                    diagnostics().state('upload',res.statusCode>=400?'upload_failed':'upload_recovered',{httpStatus:res.statusCode});
+                }
                 try {
                     resolve({ ok: res.statusCode < 400, status: res.statusCode, data: JSON.parse(data) });
                 } catch {
@@ -965,7 +1230,7 @@ ipcMain.handle('api-fetch', async (_, { url, method = 'GET', body = null, header
         });
         const deadline = setTimeout(() => req.destroy(new Error('request_timeout')), Math.max(3000, Math.min(Number(timeoutMs) || 30000, 30000)));
         req.once('close', () => clearTimeout(deadline));
-        req.on('error', (err) => resolve({ ok: false, status: 0, data: null, error: err.message }));
+        req.on('error', (err) => {diagnostics().state('upload','upload_failed',{httpStatus:0});resolve({ ok: false, status: 0, data: null, error: err.message });});
         if (body) req.write(JSON.stringify(body));
         req.end();
     });
@@ -1059,12 +1324,14 @@ ipcMain.handle('set-private-mode', (_, enabled) => {
     cfg.privateMode = !!enabled;
     writeConfig(cfg);
     syncLog('[agent] режим изменился → перезапуск, приватный =', !!enabled);
-    try { agentProc?.kill(); } catch {}
-    agentProc = null;
+    stopAgent();
     setTimeout(launchAgent, 800);
     return { changed: true };
 });
 
+ipcMain.handle('capture-environment',()=>({npcapPresent:fs.existsSync(PCAP_API_DLL)}));
+ipcMain.handle('support-diagnostics',()=>diagnostics().status());
+ipcMain.on('support-renderer-error',event=>{if(event.sender===mainWindow?.webContents)diagnostics().state('renderer','renderer_error');});
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('get-config', () => {
@@ -1078,6 +1345,15 @@ ipcMain.handle('get-config', () => {
         lootTracking:saved.lootTracking===true,
         lootSessionId:saved.lootSessionId,lootSessionStartedAt:saved.lootSessionStartedAt,
         region: saved.region || 'europe',
+        // Автозапись сделок и фильтры возвращаем ОБЯЗАТЕЛЬНО, хотя их читает
+        // только экран настроек: без них галочка рисовалась выключенной при
+        // каждом запуске, а «Сохранить» затем писало autoLogTrade: false в файл
+        // и затирало включённое состояние. Сам агентский обработчик читает файл,
+        // поэтому сделки молча отбрасывались с «autoLogTrade is off».
+        autoLogTrade: saved.autoLogTrade === true,
+        filterMaxAge: Number.isFinite(Number(saved.filterMaxAge)) ? Number(saved.filterMaxAge) : 4,
+        filterMinDaily: Number.isFinite(Number(saved.filterMinDaily)) ? Number(saved.filterMinDaily) : 7,
+        filterMaxMargin: Number.isFinite(Number(saved.filterMaxMargin)) ? Number(saved.filterMaxMargin) : 100,
     };
 });
 
@@ -1104,6 +1380,15 @@ ipcMain.handle('sign-price-report', async (_, { itemId, city, price, quality }) 
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+    const supportTimer=setInterval(()=>{
+        if(Date.now()-captureStartedAt>60000){
+            if(!supportSessionReported){diagnostics().event('session_started','app',latestCapture||{});supportSessionReported=true;}
+            if(!fs.existsSync(PCAP_API_DLL))diagnostics().state('capture','npcap_missing');
+            else if(!latestCapture||Date.now()-latestCapture.at>15000)diagnostics().state('capture','agent_offline');
+        }
+        void diagnostics().flush();
+    },15000);supportTimer.unref();
+    const historyTimer=setInterval(()=>{void getHistoryOutbox().flush();},5000);historyTimer.unref();
     const farmTimer = setInterval(() => { void getFarmOutbox().flush(); }, 5000);
     farmTimer.unref();
     const lootTimer=setInterval(()=>{void getLootOutbox().flush();},5000);lootTimer.unref();
@@ -1157,7 +1442,7 @@ app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     try { fs.unlinkSync(OCR_SCRIPT_PATH); } catch {}
     if (agentProc && !agentProc.killed) {
-        agentProc.kill();
+        stopAgent();
     }
     if (agentWsReconnectTimer) clearTimeout(agentWsReconnectTimer);
     if (agentWsClient) { try { agentWsClient.close(); } catch {} }

@@ -8,6 +8,7 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
     const wsRef    = useRef(null);
     const timerRef = useRef(null);
     const [lastEvent, setLastEvent] = useState(null);
+    const [captureStatus,setCaptureStatus]=useState(null);
     const callbacks = useRef({ onConnect, onDisconnect, onEvent });
     callbacks.current = { onConnect, onDisconnect, onEvent };
 
@@ -24,7 +25,7 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
             ws.onmessage = (msg) => {
                 try {
                     const evt = JSON.parse(msg.data);
-                    setLastEvent(evt);
+                    if(evt.type==='capture_status')setCaptureStatus({...evt.payload,receivedAt:Date.now()});else setLastEvent(evt);
                     callbacks.current.onEvent?.(evt);
                 } catch {}
             };
@@ -53,5 +54,5 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return { lastEvent };
+    return { lastEvent, captureStatus };
 }

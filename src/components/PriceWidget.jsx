@@ -316,7 +316,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                         {result.usedToday}/{result.limit} free searches used today
                     </div>
                     <div style={{ fontSize: '11px', color: '#b4a286', marginBottom: '10px', lineHeight: 1.5 }}>
-                        Upgrade to PRO for unlimited price checks across all tiers and qualities.
+                        Upgrade to ULTRA for unlimited price checks across all tiers and qualities.
                     </div>
                     <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer"
                         style={{ fontSize: '11px', color: '#c8a050', fontWeight: '700', textDecoration: 'none' }}>
@@ -325,7 +325,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                 </div>
             )}
 
-            {/* PRO lock */}
+            {/* ULTRA lock */}
             {result?.locked && result?.reason !== 'limit_reached' && (
                 <div style={{
                     background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)',
@@ -365,7 +365,7 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                         )}
                     </div>
 
-                    {/* Quality PRO+ upsell — показываем если качество != Normal и нет PRO+ */}
+                    {/* Quality ULTRA upsell — показываем если качество != Normal и нет ULTRA */}
                     {quality > 1 && !isProPlus && (
                         <div style={{
                             background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
@@ -375,10 +375,10 @@ export default function PriceWidget({ city, lastEvent, onOCRCity }) {
                             <span style={{ fontSize: '14px' }}>🔒</span>
                             <div>
                                 <div style={{ fontSize: '11px', color: '#a855f7', fontWeight: '700' }}>
-                                    {QUALITY.find(q => q.v === quality)?.label} — PRO+
+                                    {QUALITY.find(q => q.v === quality)?.label} — ULTRA
                                 </div>
                                 <div style={{ fontSize: '10px', color: '#b4a286', lineHeight: 1.4 }}>
-                                    {t('qualityProPlus') || 'Price monitoring by quality is available in PRO+'}
+                                    {t('qualityProPlus') || 'Price monitoring by quality is available in ULTRA'}
                                 </div>
                             </div>
                         </div>

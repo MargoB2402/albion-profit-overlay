@@ -50,7 +50,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
     const [farmTracking, setFarmTracking] = useState(config.farmTracking === true);
     const [farmStatus,setFarmStatus]=useState(null);
     useEffect(()=>{let live=true;const read=()=>window.electron?.farmStatus?.().then(value=>{if(live)setFarmStatus(value);}).catch(()=>{});read();const timer=setInterval(read,5000);return()=>{live=false;clearInterval(timer);};},[]);
-    const farmCopy = ({ru:['Учёт островов · бета','Личные наблюдения и история. Просмотр на сайте: PRO+. После включения зайди на остров.'],en:['Island tracking · beta','Private observations and history. View on the website: PRO+. Re-enter the island after enabling.'],de:['Inselaufzeichnung · Beta','Private Beobachtungen und Verlauf. Ansicht auf der Website: PRO+. Insel nach Aktivierung neu betreten.'],es:['Registro de islas · beta','Observaciones e historial privados. Consulta en la web: PRO+. Vuelve a entrar en la isla al activarlo.']})[lang] || ['Island tracking · beta','Private observations and history. View on the website: PRO+.'];
+    const farmCopy = ({ru:['Учёт островов · бета','Личные наблюдения и история. Просмотр на сайте: ULTRA. После включения зайди на остров.'],en:['Island tracking · beta','Private observations and history. View on the website: ULTRA. Re-enter the island after enabling.'],de:['Inselaufzeichnung · Beta','Private Beobachtungen und Verlauf. Ansicht auf der Website: ULTRA. Insel nach Aktivierung neu betreten.'],es:['Registro de islas · beta','Observaciones e historial privados. Consulta en la web: ULTRA. Vuelve a entrar en la isla al activarlo.']})[lang] || ['Island tracking · beta','Private observations and history. View on the website: ULTRA.'];
     const [region,  setRegion]  = useState(config.region       || 'europe');
     const [saved,     setSaved]     = useState(false);
 
@@ -115,7 +115,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ color: '#22c55e' }}>
                                 ✅ {t('accountOk')}
-                                {isProPlus && <span style={{ marginLeft: '6px', color: '#a78bfa', fontWeight: 700 }}>PRO+</span>}
+                                {isProPlus && <span style={{ marginLeft: '6px', color: '#a78bfa', fontWeight: 700 }}>ULTRA</span>}
                                 {!isProPlus && isPro && <span style={{ marginLeft: '6px', color: '#c8a050', fontWeight: 700 }}>PRO</span>}
                                 {!isPro && !isProPlus && <span style={{ marginLeft: '6px', color: '#b4a286' }}>Free</span>}
                             </span>
@@ -155,14 +155,14 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                         <span style={{ color: privateMode ? '#22c55e' : '#c6b898', fontWeight: 600 }}>
                             🔒 {t('privateTitle') || 'Приватный режим'}
-                            {!isProPlus && <span style={{ marginLeft: '6px', color: '#a78bfa', fontWeight: 700 }}>PRO+</span>}
+                            {!isProPlus && <span style={{ marginLeft: '6px', color: '#a78bfa', fontWeight: 700 }}>ULTRA</span>}
                         </span>
                         <button
                             onClick={async () => {
                                 const r = await togglePrivateMode?.(!privateMode);
                                 if (r && !r.ok) {
                                     alert(r.error === 'PRO_PLUS_REQUIRED'
-                                        ? (t('privateNeedProPlus') || 'Приватный режим доступен на PRO+.')
+                                        ? (t('privateNeedProPlus') || 'Приватный режим доступен на ULTRA.')
                                         : (t('privateErr') || 'Не удалось переключить режим.'));
                                 }
                             }}
@@ -219,7 +219,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
             <div style={S.toggle}>
                 <div>
                     <span style={{ fontSize: '11px', color: '#c6b898' }}>{t('autoLogLabel') || 'Авто-запись покупок в Бухгалтерию'}</span>
-                    <div style={{ fontSize: '10px', color: '#8a7d65', marginTop: '2px' }}>{t('autoLogHint') || 'PRO+ · Агент фиксирует торговые операции'}</div>
+                    <div style={{ fontSize: '10px', color: '#8a7d65', marginTop: '2px' }}>{t('autoLogHint') || 'ULTRA · Агент фиксирует торговые операции'}</div>
                 </div>
                 <ToggleSwitch checked={autoLog} onChange={setAutoLog} />
             </div>
@@ -228,7 +228,7 @@ export default function Settings({ onClose, agentLocationKnown, config, saveConf
                 <span><strong>{farmCopy[0]}</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{farmCopy[1]}</span></span>
                 <input type="checkbox" checked={farmTracking} disabled={!isProPlus && !farmTracking} onChange={e=>setFarmTracking(e.target.checked)} style={{width:22,height:22,flexShrink:0}} />
             </label>
-            <div style={{display:'grid',gap:12,marginTop:12}}><span><strong>{lootCopy.tab} · PRO / PRO+</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{lootCopy.setup}</span></span><button type="button" data-loot-session disabled={lootSaving||(!lootTracking&&!isPro&&!isProPlus)} style={{...S.btn,minHeight:44,margin:0}} onClick={async()=>{setLootSaving(true);setLootError(false);try{await saveConfig({wallet:wallet.trim(),token:token.trim(),region,lootTracking:!lootTracking});setLootTracking(!lootTracking);}catch{setLootError(true);}finally{setLootSaving(false);}}}>{lootSaving?lootCopy.busy:lootTracking?lootCopy.endSession:lootCopy.startSession}</button></div>
+            <div style={{display:'grid',gap:12,marginTop:12}}><span><strong>{lootCopy.tab} · ULTRA</strong><span style={{display:'block',marginTop:6,lineHeight:1.5}}>{lootCopy.setup}</span></span><button type="button" data-loot-session disabled={lootSaving||(!lootTracking&&!isPro&&!isProPlus)} style={{...S.btn,minHeight:44,margin:0}} onClick={async()=>{setLootSaving(true);setLootError(false);try{await saveConfig({wallet:wallet.trim(),token:token.trim(),region,lootTracking:!lootTracking});setLootTracking(!lootTracking);}catch{setLootError(true);}finally{setLootSaving(false);}}}>{lootSaving?lootCopy.busy:lootTracking?lootCopy.endSession:lootCopy.startSession}</button></div>
             <p style={{fontSize:11,lineHeight:1.6}}>{lootCopy.sessionHint}</p>{lootError&&<p role="alert">{lootCopy.error}</p>}
             {lootTracking&&lootStatus&&<div style={{fontSize:11,lineHeight:1.6}}><p>{(lootDiagnostics[lang]||lootDiagnostics.en)[2]}: {lootStatus.received||0} · {(lootDiagnostics[lang]||lootDiagnostics.en)[3]}: {lootStatus.sent||0} · {(lootDiagnostics[lang]||lootDiagnostics.en)[4]}: {lootStatus.pending}</p><p>{(lootDiagnostics[lang]||lootDiagnostics.en)[5]}: {lootStatus.rejected||0}{lootStatus.awaiting>0?' · '+(lootDiagnostics[lang]||lootDiagnostics.en)[6]+': '+lootStatus.awaiting:''}{lootStatus.error?' · '+lootStatus.error:''}</p><p>{lootStatus.capture?.ready?`${(lootDiagnostics[lang]||lootDiagnostics.en)[0]}: ${lootStatus.capture.silverEvents+lootStatus.capture.itemEvents}`:(lootDiagnostics[lang]||lootDiagnostics.en)[1]}{lootStatus.capture?.reason?' · '+lootStatus.capture.reason:''}</p></div>}
             {farmTracking&&farmStatus&&<p style={{fontSize:11,marginBottom:12,color:farmStatus.error?'#f59e0b':'#a39478'}}>{({ru:'Очередь островов',en:'Island queue',de:'Insel-Warteschlange',es:'Cola de islas'})[lang]||'Island queue'}: {farmStatus.pending}{farmStatus.error?' · '+farmStatus.error:''}</p>}

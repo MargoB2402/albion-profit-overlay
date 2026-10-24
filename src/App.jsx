@@ -9,6 +9,7 @@ import FavoritesWidget from './components/FavoritesWidget';
 import RelistWidget from './components/RelistWidget';
 import TradeNotification from './components/TradeNotification';
 import Settings from './components/Settings';
+import CaptureStatus from './components/CaptureStatus';
 import { useAgent } from './hooks/useAgent';
 import { useApi } from './hooks/useApi';
 import { useI18n } from './hooks/useI18n';
@@ -61,7 +62,7 @@ export default function App() {
         });
     }, []);
 
-    const { lastEvent } = useAgent({
+    const { lastEvent, captureStatus:agentCaptureStatus } = useAgent({
         onConnect:    () => setAgentConnected(true),
         onDisconnect: () => setAgentConnected(false),
         onEvent: (evt) => {
@@ -262,6 +263,7 @@ export default function App() {
                 </div>
             )}
 
+            <CaptureStatus connected={agentConnected} status={agentCaptureStatus}/>
             {capture && <div role="status" style={{ padding: '6px 12px', fontSize: '11px', color: capture.failed ? '#e8a030' : '#b4a286' }}>
                 {t('capturedQuotes')}: {capture.sent} · {t('capturePending')}: {capture.pending}{capture.dropped > 0 && ` · ${t('captureDropped')}: ${capture.dropped}`}{capture.failed > 0 && ` · ${t('captureFailed')}: ${capture.failed}`}
             </div>}

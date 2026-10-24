@@ -1,8 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
+window.addEventListener('error',()=>ipcRenderer.send('support-renderer-error'));
+window.addEventListener('unhandledrejection',()=>ipcRenderer.send('support-renderer-error'));
 
 contextBridge.exposeInMainWorld('electron', {
     // Конфиг
     getConfig:  () => ipcRenderer.invoke('get-config'),
+    captureEnvironment:()=>ipcRenderer.invoke('capture-environment'),
+    supportDiagnostics:()=>ipcRenderer.invoke('support-diagnostics'),
     lootStatus:()=>ipcRenderer.invoke('loot-status'),
     farmStatus: () => ipcRenderer.invoke('farm-status'),
     saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),

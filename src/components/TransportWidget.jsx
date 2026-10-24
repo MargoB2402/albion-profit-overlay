@@ -275,7 +275,7 @@ export default function TransportWidget({ city }) {
                             {top5.items.map(item => <Top5Card key={item.itemId} item={item} t={t} />)}
                             {!top5.isPro && (
                                 <div style={{ fontSize: '10px', color: '#a39478', textAlign: 'center', marginTop: '4px' }}>
-                                    T7–T8 · <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer" style={{ color: '#c8a050' }}>PRO</a>
+                                    T7–T8 · <a href="https://promptly.sbs/#pricing" target="_blank" rel="noreferrer" style={{ color: '#c8a050' }}>ULTRA</a>
                                 </div>
                             )}
                         </>

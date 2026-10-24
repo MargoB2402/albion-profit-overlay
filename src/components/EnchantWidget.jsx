@@ -262,7 +262,7 @@ export default function EnchantWidget() {
                         </div>
                     ))}
 
-                    {/* Ledger — PRO+ only */}
+                    {/* Ledger — ULTRA only */}
                     {isProPlus ? (
                         <button onClick={sendToLedger} disabled={ledgerLoading || ledgerDone} style={{ ...SI.btn, width: '100%', marginTop: '10px', background: ledgerDone ? '#22c55e' : '#3b82f6', fontSize: '11px' }}>
                             {ledgerDone ? t('enchantLedgerDone') : ledgerLoading ? t('loading') : t('enchantSendLedger')}

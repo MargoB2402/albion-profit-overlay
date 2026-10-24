@@ -1,5 +1,15 @@
 # albion-profit-overlay
 
+## 1.9.6 — VPN adapter discovery and support diagnostics
+
+Windows capture now opens all Npcap-visible adapters, rediscovers devices after VPN/network changes and retries unavailable interfaces. Shared processing suppresses cross-adapter duplicates. The overlay displays capture status and packet/decoder counters.
+
+Important technical failures and recovery summaries are sent automatically to the website support dashboard, using the connected account. Reports exclude tokens, raw packets, chat, item lists, adapter addresses and full filesystem paths. Failed reports are queued locally with bounded storage and retries. This requires the updated website diagnostics endpoint.
+
+Npcap remains required. TAP adapters are eligible for capture; this does not make WinTun visible to Npcap. WinDivert is not enabled in this release, and compatibility with a particular VPN must be verified in gameplay.
+
+The upstream Albion Data Client uses the MIT license. The modified agent source, build instructions and third-party notices are provided as a release asset alongside the installer.
+
 ## 1.9.0 — Loot tracker and recording sessions
 
 In Settings, connect your PRO/PRO+ account and choose the actual game server. Tap **Start loot session** before collecting loot; **End loot session** stops recording. Each new start creates a separate session. Ordinary Save and application restart preserve the current session. Existing queued pickups continue uploading after recording ends.
