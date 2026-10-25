@@ -1,5 +1,24 @@
 # albion-profit-overlay
 
+## Windows 1.10.3 - 2026-10-25
+
+[Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.3)
+
+Windows 1.10.3 adds IPv4 UDP fragment capture and reassembly before Photon decoding.
+
+- The capture filter now retains non-initial UDP fragments. A complete datagram is passed to the game decoder only after its first fragment confirms a game port (5056).
+- Reassembly supports out-of-order and duplicate fragments, rejects conflicting data, and is bounded to 32 incomplete datagrams with a 30-second lifetime. No raw packet data is sent to support reports.
+- Counter snapshots are sent every five minutes even without a capture-state change. New numeric IP-fragment counters are available locally; retaining those additional fields on the website requires the updated diagnostic sanitizer. Existing market counters work with the existing backend.
+
+The reported player installed 1.10.2, but that timeline contains only an initial 1.10.2 snapshot. The previous release repaired Photon-message fragments; it did not reconstruct IPv4 fragments before transport decoding. These are different layers.
+
+Checks: the old BPF filter rejects the continuation fixture and the new one accepts it; the old capture pipeline loses the IP-fragmented response. The corrected pipeline delivers a complete 20-order market page through IP/UDP/Photon decoding, including reversed fragments and repeats. Bounds/conflict/expiry, Go regressions, diagnostic snapshot tests, protected UI and package checks pass. The affected PC still needs confirmation after updating; no private packet capture was used to claim an exact diagnosis.
+
+Restart the overlay to download the update, then choose Restart Now. Alternatively install the attached EXE over the previous version. Settings, privacy and subscription gates are preserved. Browse a full market page, keep capture running for at least six minutes, then send the new support timeline if the issue remains.
+
+Includes installer, blockmap/latest.yml, matching open-source agent archive and SHA256SUMS.txt. Private application sources and obfuscation mappings are not published.
+
+
 ## Windows 1.10.2
 
 [Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.2)

@@ -1,0 +1,339 @@
+--- /dev/null
++++ b/client/capture_ip_fragments.go
+@@ -0,0 +1,128 @@
++package client
++
++import (
++	"encoding/binary"
++	"github.com/google/gopacket"
++	"github.com/google/gopacket/layers"
++	"time"
++)
++
++// Non-initial IPv4 fragments have no UDP ports for BPF to inspect. Only a
++// complete datagram with an observed 5056 port is passed to the game decoder.
++const gameCaptureFilter = "tcp port 5056 or udp port 5056 or (ip proto 17 and (ip[6:2] & 0x1fff != 0))"
++const ipFragmentPayloadLimit = 65515
++
++type ipFragmentKey struct {
++	source, destination [4]byte
++	id                  uint16
++}
++type ipFragmentAssembly struct {
++	payload, covered    []byte
++	first               *layers.IPv4
++	total, unique, high int
++	at                  time.Time
++}
++
++func (p *capturePipeline) reassembleIP(packet gopacket.Packet, at time.Time) gopacket.Packet {
++	layer := packet.Layer(layers.LayerTypeIPv4)
++	if layer == nil {
++		return packet
++	}
++	ip := layer.(*layers.IPv4)
++	if ip.Flags&layers.IPv4MoreFragments == 0 && ip.FragOffset == 0 {
++		return packet
++	}
++	if ip.Protocol != layers.IPProtocolUDP {
++		return nil
++	}
++	p.stats.Lock()
++	p.stats.s.IPFragments++
++	p.stats.Unlock()
++	key := ipFragmentKey{id: ip.Id}
++	copy(key.source[:], ip.SrcIP.To4())
++	copy(key.destination[:], ip.DstIP.To4())
++	reject := func() gopacket.Packet {
++		delete(p.ipFragments, key)
++		p.stats.Lock()
++		p.stats.s.IPFragmentErrors++
++		p.stats.Unlock()
++		return nil
++	}
++	offset, size := int(ip.FragOffset)*8, len(ip.Payload)
++	more := ip.Flags&layers.IPv4MoreFragments != 0
++	if size == 0 || ip.IHL < 5 || int(ip.Length) != int(ip.IHL)*4+size || offset > ipFragmentPayloadLimit-size || more && size%8 != 0 {
++		return reject()
++	}
++	if offset == 0 && (size < 8 || binary.BigEndian.Uint16(ip.Payload[:2]) != 5056 && binary.BigEndian.Uint16(ip.Payload[2:4]) != 5056) {
++		delete(p.ipFragments, key)
++		return nil
++	}
++	for k, v := range p.ipFragments {
++		if at.Sub(v.at) > 30*time.Second {
++			delete(p.ipFragments, k)
++		}
++	}
++	a := p.ipFragments[key]
++	if a == nil {
++		if len(p.ipFragments) >= 32 {
++			var oldest ipFragmentKey
++			var stamp time.Time
++			for k, v := range p.ipFragments {
++				if stamp.IsZero() || v.at.Before(stamp) {
++					oldest, stamp = k, v.at
++				}
++			}
++			delete(p.ipFragments, oldest)
++		}
++		a = &ipFragmentAssembly{payload: make([]byte, ipFragmentPayloadLimit), covered: make([]byte, (ipFragmentPayloadLimit+7)/8), at: at}
++		p.ipFragments[key] = a
++	}
++	end := offset + size
++	if a.total > 0 && (end > a.total || !more && end != a.total) {
++		return reject()
++	}
++	if !more {
++		if end < a.high {
++			return reject()
++		}
++		a.total = end
++	}
++	if offset == 0 {
++		header := *ip
++		a.first = &header
++	}
++	for i, value := range ip.Payload {
++		pos := offset + i
++		mask := byte(1 << uint(pos%8))
++		if a.covered[pos/8]&mask != 0 {
++			if a.payload[pos] != value {
++				return reject()
++			}
++		} else {
++			a.covered[pos/8] |= mask
++			a.payload[pos] = value
++			a.unique++
++		}
++	}
++	if end > a.high {
++		a.high = end
++	}
++	if a.total == 0 || a.first == nil || a.unique != a.total {
++		return nil
++	}
++	if a.total < 8 || a.total > 65535-int(a.first.IHL)*4 || int(binary.BigEndian.Uint16(a.payload[4:6])) != a.total {
++		return reject()
++	}
++	header := *a.first
++	header.Flags &^= layers.IPv4MoreFragments
++	header.FragOffset = 0
++	buffer := gopacket.NewSerializeBuffer()
++	if err := gopacket.SerializeLayers(buffer, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, &header, gopacket.Payload(a.payload[:a.total])); err != nil {
++		return reject()
++	}
++	delete(p.ipFragments, key)
++	p.stats.Lock()
++	p.stats.s.IPReassembled++
++	p.stats.Unlock()
++	return gopacket.NewPacket(buffer.Bytes(), layers.LayerTypeIPv4, gopacket.Default)
++}
+--- /dev/null
++++ b/client/capture_ip_fragments_test.go
+@@ -0,0 +1,153 @@
++package client
++
++import (
++	"github.com/ao-data/albiondata-client/client/photon"
++	"github.com/google/gopacket"
++	"github.com/google/gopacket/layers"
++	"github.com/google/gopacket/pcap"
++	"strings"
++	"testing"
++	"time"
++)
++
++func ipFragmentFixture(t *testing.T, id uint16, offset uint16, more bool, data []byte) gopacket.Packet {
++	t.Helper()
++	ip := &layers.IPv4{Version: 4, IHL: 5, Id: id, FragOffset: offset, SrcIP: []byte{1, 2, 3, 4}, DstIP: []byte{5, 6, 7, 8}, Protocol: layers.IPProtocolUDP}
++	if more {
++		ip.Flags = layers.IPv4MoreFragments
++	}
++	b := gopacket.NewSerializeBuffer()
++	if err := gopacket.SerializeLayers(b, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, ip, gopacket.Payload(data)); err != nil {
++		t.Fatal(err)
++	}
++	return gopacket.NewPacket(b.Bytes(), layers.LayerTypeIPv4, gopacket.Default)
++}
++
++func TestFullMarketPageThroughIPFragments(t *testing.T) {
++	row := `{"ItemTypeId":"T4_BAG","LocationId":"4002","UnitPriceSilver":10000,"Amount":1,"QualityLevel":1,"Padding":"` + strings.Repeat("x", 300) + `"}`
++	payload := []byte{0, 0, 0x47, 20}
++	for i := 0; i < 20; i++ {
++		n := uint32(len(row))
++		for n >= 128 {
++			payload = append(payload, byte(n)|128)
++			n >>= 7
++		}
++		payload = append(payload, byte(n))
++		payload = append(payload, row...)
++	}
++	photonPacket := buildPhotonPacket(photon.MsgResponse, byte(opAuctionGetOffers), payload)
++	ip := &layers.IPv4{Version: 4, IHL: 5, SrcIP: []byte{1, 2, 3, 4}, DstIP: []byte{5, 6, 7, 8}, Protocol: layers.IPProtocolUDP}
++	udp := &layers.UDP{SrcPort: 5056, DstPort: 6000}
++	udp.SetNetworkLayerForChecksum(ip)
++	b := gopacket.NewSerializeBuffer()
++	if err := gopacket.SerializeLayers(b, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, ip, udp, gopacket.Payload(photonPacket)); err != nil {
++		t.Fatal(err)
++	}
++	data := append([]byte(nil), b.Bytes()[20:]...)
++	p := newCapturePipeline(newRouter(), &captureHealth{})
++	at := time.Now()
++	before := liveCaptureHealth.snapshot(at)
++	parts := (len(data) + 999) / 1000
++	for i := parts - 1; i >= 0; i-- {
++		start := i * 1000
++		end := start + 1000
++		if end > len(data) {
++			end = len(data)
++		}
++		part := ipFragmentFixture(t, 21, uint16(start/8), i < parts-1, data[start:end])
++		p.accept("vpn", part, at)
++		if i > 0 {
++			p.accept("vpn", part, at)
++		}
++	}
++	select {
++	case op := <-p.processor.router.newOperation:
++		op.Process(p.processor.router.albionstate)
++	default:
++		t.Fatal("reassembled page did not reach the operation router")
++	}
++	after := liveCaptureHealth.snapshot(at)
++	if after.MarketResponses-before.MarketResponses != 1 || after.MarketRows-before.MarketRows != 20 {
++		t.Fatal("complete 20-order page failed end-to-end IP/UDP/Photon decoding", before, after)
++	}
++}
++
++func TestCaptureFilterIncludesIPv4Continuations(t *testing.T) {
++	data := fragmentedGameUDP(t)
++	tail := ipFragmentFixture(t, 17, 125, false, data[1000:])
++	frame := make([]byte, 14)
++	frame[12] = 8
++	frame = append(frame, tail.Data()...)
++	info := gopacket.CaptureInfo{Length: len(frame), CaptureLength: len(frame)}
++	filter, err := pcap.NewBPF(layers.LinkTypeEthernet, 65535, gameCaptureFilter)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if !filter.Matches(info, frame) {
++		t.Fatal("capture filter discards non-initial game UDP fragments")
++	}
++	old, err := pcap.NewBPF(layers.LinkTypeEthernet, 65535, "tcp port 5056 or udp port 5056")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if old.Matches(info, frame) {
++		t.Fatal("fixture must demonstrate the old port filter loss")
++	}
++}
++
++func TestIPFragmentsRejectConflictsAndBoundMemory(t *testing.T) {
++	data := fragmentedGameUDP(t)
++	stats := &captureHealth{}
++	p := newCapturePipeline(newRouter(), stats)
++	at := time.Now()
++	p.accept("vpn", ipFragmentFixture(t, 17, 125, false, data[1000:]), at)
++	changed := append([]byte(nil), data[1000:]...)
++	changed[0] ^= 1
++	p.accept("vpn", ipFragmentFixture(t, 17, 125, false, changed), at)
++	p.accept("vpn", ipFragmentFixture(t, 17, 0, true, data[:1000]), at)
++	if stats.snapshot(at).Encrypted != 0 || stats.snapshot(at).IPFragmentErrors != 1 {
++		t.Fatal("conflicting IP fragments were accepted")
++	}
++	for i := uint16(20); i < 70; i++ {
++		p.accept("vpn", ipFragmentFixture(t, i, 125, false, data[1000:]), at)
++	}
++	if len(p.ipFragments) > 32 {
++		t.Fatal("unbounded fragment buffers")
++	}
++	p.accept("vpn", ipFragmentFixture(t, 80, 125, false, data[1000:]), at.Add(31*time.Second))
++	if len(p.ipFragments) != 1 {
++		t.Fatal("stale fragments retained")
++	}
++}
++
++func fragmentedGameUDP(t *testing.T) []byte {
++	t.Helper()
++	ip := &layers.IPv4{Version: 4, IHL: 5, SrcIP: []byte{1, 2, 3, 4}, DstIP: []byte{5, 6, 7, 8}, Protocol: layers.IPProtocolUDP}
++	udp := &layers.UDP{SrcPort: 5056, DstPort: 6000}
++	udp.SetNetworkLayerForChecksum(ip)
++	data := make([]byte, 2000)
++	data[2] = 1 // encrypted Photon marker: counts once only after full UDP reassembly
++	b := gopacket.NewSerializeBuffer()
++	if err := gopacket.SerializeLayers(b, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, ip, udp, gopacket.Payload(data)); err != nil {
++		t.Fatal(err)
++	}
++	return append([]byte(nil), b.Bytes()[20:]...)
++}
++
++func TestCaptureReassemblesIPv4BeforeTransportFilter(t *testing.T) {
++	data := fragmentedGameUDP(t)
++	stats := &captureHealth{}
++	p := newCapturePipeline(newRouter(), stats)
++	at := time.Now()
++	// Tail arrives before the first fragment; duplicate delivery must not complete it.
++	tail := ipFragmentFixture(t, 17, 125, false, data[1000:])
++	p.accept("vpn", tail, at)
++	p.accept("vpn", tail, at.Add(time.Millisecond))
++	if stats.snapshot(at).Encrypted != 0 {
++		t.Fatal("partial IP datagram decoded")
++	}
++	p.accept("vpn", ipFragmentFixture(t, 17, 0, true, data[:1000]), at.Add(2*time.Millisecond))
++	if stats.snapshot(at).Encrypted != 1 {
++		t.Fatal("large UDP response lost before Photon decoder")
++	}
++}
+--- a/client/capture_pipeline.go
++++ b/client/capture_pipeline.go
+@@ -18,16 +18,21 @@
+ 
+ // A single consumer shares game state across adapters, with separate fragmentation per network flow.
+ type capturePipeline struct {
+-	processor *listener
+-	seen      map[[32]byte]captureSeen
+-	flows     map[string]captureFlow
+-	stats     *captureHealth
++	processor   *listener
++	seen        map[[32]byte]captureSeen
++	flows       map[string]captureFlow
++	stats       *captureHealth
++	ipFragments map[ipFragmentKey]*ipFragmentAssembly
+ }
+ 
+ func newCapturePipeline(r *Router, stats *captureHealth) *capturePipeline {
+-	return &capturePipeline{processor: newListener(r), seen: map[[32]byte]captureSeen{}, flows: map[string]captureFlow{}, stats: stats}
++	return &capturePipeline{processor: newListener(r), seen: map[[32]byte]captureSeen{}, flows: map[string]captureFlow{}, stats: stats, ipFragments: map[ipFragmentKey]*ipFragmentAssembly{}}
+ }
+ func (p *capturePipeline) accept(device string, packet gopacket.Packet, at time.Time) bool {
++	packet = p.reassembleIP(packet, at)
++	if packet == nil {
++		return false
++	}
+ 	if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || len(packet.TransportLayer().LayerPayload()) == 0 {
+ 		return false
+ 	}
+--- a/client/capture_watcher.go
++++ b/client/capture_watcher.go
+@@ -52,7 +52,7 @@
+ 		return
+ 	}
+ 	defer handle.Close()
+-	if err = handle.SetBPFFilter("tcp port 5056 or udp port 5056"); err != nil {
++	if err = handle.SetBPFFilter(gameCaptureFilter); err != nil {
+ 		log.Errorf("[capture] Cannot filter %s: %v", device, err)
+ 		return
+ 	}
+--- a/client/capture_health.go
++++ b/client/capture_health.go
+@@ -29,6 +29,9 @@
+ 	ActivityEvents         uint64 `json:"activityEvents"`
+ 	ActivityRecorded       uint64 `json:"activityRecorded"`
+ 	ActivityUnidentified   uint64 `json:"activityUnidentified"`
++	IPFragments            uint64 `json:"ipFragments"`
++	IPReassembled          uint64 `json:"ipReassembled"`
++	IPFragmentErrors       uint64 `json:"ipFragmentErrors"`
+ }
+ type captureHealth struct {
+ 	sync.Mutex
