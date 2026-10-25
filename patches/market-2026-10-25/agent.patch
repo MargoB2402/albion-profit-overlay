@@ -1,0 +1,347 @@
+--- a/client/listener.go
++++ b/client/listener.go
+@@ -215,6 +215,9 @@
+ 		l.farmRecorder().request(code, params, farmNow())
+ 	}
+ 	operation, err := decodeRequest(params)
++	if code, ok := resolveOperationCode(params); ok && (OperationType(code) == opAuctionGetOffers || OperationType(code) == opAuctionGetRequests) {
++		liveCaptureHealth.marketCount("request", 1)
++	}
+ 	if params[253] != nil {
+ 		if number, ok := toUint16(params[253]); ok {
+ 			shouldDebug, exists := ConfigGlobal.DebugOperations[int(number)]
+@@ -263,6 +266,11 @@
+ 	}
+ 
+ 	operation, err := decodeResponse(params)
++	if code, ok := resolveOperationCode(params); ok && (OperationType(code) == opAuctionGetOffers || OperationType(code) == opAuctionGetRequests) && (err != nil || returnCode != 0) {
++		liveCaptureHealth.marketCount("error", 1)
++		// Failed responses must never turn into market prices.
++		return
++	}
+ 	if params[253] != nil {
+ 		if number, ok := toUint16(params[253]); ok {
+ 			shouldDebug, exists := ConfigGlobal.DebugOperations[int(number)]
+--- a/client/local_ws.go
++++ b/client/local_ws.go
+@@ -142,11 +142,9 @@
+ 			continue
+ 		}
+ 		location := o.LocationID
+-		if location == "" {
+-			location = locationID
+-		}
+-		city := marketLocationIDToCity(location)
++		city := marketOrderCity(location, locationID)
+ 		if city == "unknown" {
++			liveCaptureHealth.marketCount("location", 1)
+ 			log.Warnf("[OVERLAY] Skipping order with unknown auction location %q (player=%q)", location, locationID)
+ 			continue
+ 		}
+@@ -165,6 +163,19 @@
+ 			"item_id": out[0].ItemID, "city": city, "orders": out,
+ 		}})
+ 	}
++}
++
++func marketOrderCity(auctionID, playerID string) string {
++	if auctionID != "" {
++		// An explicit unknown auction must never inherit a previous city.
++		return marketLocationIDToCity(auctionID)
++	}
++	if city := marketLocationIDToCity(playerID); city != "unknown" {
++		return city
++	}
++	// Ordinary market rows can omit LocationId. A Join supplies a physical
++	// city ID (e.g. 4000), not necessarily its auction ID (4002).
++	return locationIDToCity(playerID)
+ }
+ 
+ // BroadcastLocation — отправить смену локации
+--- a/client/local_ws_test.go
++++ b/client/local_ws_test.go
+@@ -1,6 +1,7 @@
+ package client
+ 
+ import (
++	"encoding/json"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"strings"
+@@ -10,6 +11,74 @@
+ 	"github.com/ao-data/albiondata-client/lib"
+ 	gws "github.com/gorilla/websocket"
+ )
++
++func TestMarketResponseBeforeJoinUsesExplicitAuctionOnly(t *testing.T) {
++	ready := make(chan struct{})
++	var peer *gws.Conn
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		var err error
++		peer, err = (&gws.Upgrader{}).Upgrade(w, r, nil)
++		if err != nil {
++			t.Error(err)
++			close(ready)
++			return
++		}
++		getOverlayHub().add(peer)
++		close(ready)
++	}))
++	defer server.Close()
++	conn, _, err := gws.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	<-ready
++	if peer == nil {
++		t.Fatal("no peer")
++	}
++	defer getOverlayHub().remove(peer)
++	debug := ConfigGlobal.Debug
++	ConfigGlobal.Debug = true
++	defer func() { ConfigGlobal.Debug = debug }()
++	state := &albionState{}
++	for _, sample := range []struct{ side, auction, player string }{{"offer", "4002", ""}, {"request", "4002", ""}, {"offer", "", "4000"}, {"request", "", "4000"}} {
++		side := sample.side
++		state.LocationId = sample.player
++		row, _ := json.Marshal(&lib.MarketOrder{ItemID: "T4_BAG", LocationID: sample.auction, Price: 69890000, Amount: 1, QualityLevel: 1, AuctionType: side})
++		if side == "offer" {
++			(operationAuctionGetOffersResponse{MarketOrders: []string{string(row)}}).Process(state)
++		} else {
++			(operationAuctionGetRequestsResponse{MarketOrders: []string{string(row)}}).Process(state)
++		}
++		conn.SetReadDeadline(time.Now().Add(time.Second))
++		var event struct {
++			Type    string
++			Payload struct {
++				City   string
++				Orders []struct {
++					IsOffer bool `json:"is_offer"`
++				}
++			}
++		}
++		if err := conn.ReadJSON(&event); err != nil {
++			t.Fatal(err)
++		}
++		if event.Type != "market_view" || event.Payload.City != "Fort Sterling" || len(event.Payload.Orders) != 1 || event.Payload.Orders[0].IsOffer != (side == "offer") {
++			t.Fatalf("wrong market: %+v", event)
++		}
++	}
++	state.LocationId = ""
++	before := liveCaptureHealth.snapshot(time.Now())
++	(operationAuctionGetOffersResponse{MarketOrders: []string{`{"ItemTypeId":"T4_BAG","UnitPriceSilver":100000,"LocationId":"","QualityLevel":1,"AuctionType":"offer"}`}}).Process(state)
++	conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
++	if _, _, err := conn.ReadMessage(); err == nil {
++		t.Fatal("invented market for unknown location")
++	}
++	after := liveCaptureHealth.snapshot(time.Now())
++	if after.MarketResponses != before.MarketResponses+1 || after.MarketRows != before.MarketRows+1 || after.MarketUnknownLocations != before.MarketUnknownLocations+1 {
++		t.Fatalf("missing diagnostics: %+v", after)
++	}
++}
+ 
+ func TestOverlayAuctionPageIncludesAllItemsAndBothSides(t *testing.T) {
+ 	ready := make(chan struct{})
+@@ -69,6 +138,17 @@
+ }
+ 
+ func TestWorldLocationAndAuctionLocationAreDifferentContexts(t *testing.T) {
++	for _, pair := range []struct{ id, city string }{{"0000", "Thetford"}, {"1000", "Lymhurst"}, {"2000", "Bridgewatch"}, {"3004", "Martlock"}, {"4000", "Fort Sterling"}, {"5000", "Brecilien"}, {"3003", "Black Market"}, {"3005", "Caerleon"}} {
++		if got := marketOrderCity("", pair.id); got != pair.city {
++			t.Fatalf("missing auction location in world city %s: %s", pair.id, got)
++		}
++	}
++	if marketOrderCity("9999", "4000") != "unknown" {
++		t.Fatal("explicit unknown auction inherited physical city")
++	}
++	if marketOrderCity("", "") != "unknown" {
++		t.Fatal("invented missing city")
++	}
+ 	if locationIDToCity("3003") != "Caerleon" || marketLocationIDToCity("3003") != "Black Market" {
+ 		t.Fatal("physical Caerleon and its NPC auction must have separate meanings")
+ 	}
+--- a/client/capture_health.go
++++ b/client/capture_health.go
+@@ -6,18 +6,25 @@
+ )
+ 
+ type captureSnapshot struct {
+-	State       string `json:"state"`
+-	Devices     int    `json:"devices"`
+-	Opened      int    `json:"opened"`
+-	Failed      int    `json:"failed"`
+-	Packets     uint64 `json:"packets"`
+-	Decoded     uint64 `json:"decoded"`
+-	Encrypted   uint64 `json:"encrypted"`
+-	Duplicates  uint64 `json:"duplicates"`
+-	Dropped     uint64 `json:"dropped"`
+-	LastPacket  int64  `json:"lastPacketAt"`
+-	LastDecoded int64  `json:"lastDecodedAt"`
+-	At          int64  `json:"at"`
++	State                  string `json:"state"`
++	Devices                int    `json:"devices"`
++	Opened                 int    `json:"opened"`
++	Failed                 int    `json:"failed"`
++	Packets                uint64 `json:"packets"`
++	Decoded                uint64 `json:"decoded"`
++	Encrypted              uint64 `json:"encrypted"`
++	Duplicates             uint64 `json:"duplicates"`
++	Dropped                uint64 `json:"dropped"`
++	LastPacket             int64  `json:"lastPacketAt"`
++	LastDecoded            int64  `json:"lastDecodedAt"`
++	At                     int64  `json:"at"`
++	MarketRequests         uint64 `json:"marketRequests"`
++	MarketResponses        uint64 `json:"marketResponses"`
++	MarketRows             uint64 `json:"marketRows"`
++	MarketErrors           uint64 `json:"marketErrors"`
++	MarketJsonErrors       uint64 `json:"marketJsonErrors"`
++	MarketUnknownLocations uint64 `json:"marketUnknownLocations"`
++	MarketInvalidOrders    uint64 `json:"marketInvalidOrders"`
+ }
+ type captureHealth struct {
+ 	sync.Mutex
+@@ -27,6 +34,28 @@
+ }
+ 
+ var liveCaptureHealth = &captureHealth{}
++
++// Only aggregate counts leave the agent, never orders or packet contents.
++func (h *captureHealth) marketCount(kind string, n uint64) {
++	h.Lock()
++	defer h.Unlock()
++	switch kind {
++	case "request":
++		h.s.MarketRequests += n
++	case "response":
++		h.s.MarketResponses += n
++	case "rows":
++		h.s.MarketRows += n
++	case "error":
++		h.s.MarketErrors += n
++	case "json":
++		h.s.MarketJsonErrors += n
++	case "location":
++		h.s.MarketUnknownLocations += n
++	case "invalid":
++		h.s.MarketInvalidOrders += n
++	}
++}
+ 
+ func (h *captureHealth) packet(at time.Time) {
+ 	h.Lock()
+--- a/client/operation_auction_get_offers.go
++++ b/client/operation_auction_get_offers.go
+@@ -31,6 +31,8 @@
+ 
+ func (op operationAuctionGetOffersResponse) Process(state *albionState) {
+ 	log.Debug("Got response to AuctionGetOffers operation...")
++	liveCaptureHealth.marketCount("response", 1)
++	liveCaptureHealth.marketCount("rows", uint64(len(op.MarketOrders)))
+ 	state.WaitingForMarketData = false
+ 
+ 	var orders []*lib.MarketOrder
+@@ -40,6 +42,7 @@
+ 		var marketOrder map[string]interface{}
+ 		err2 := json.Unmarshal([]byte(v), &marketOrder)
+ 		if err2 != nil {
++			liveCaptureHealth.marketCount("json", 1)
+ 			log.Errorf("Invalid market row: %v", err2)
+ 			continue
+ 		}
+@@ -64,26 +67,30 @@
+ 
+ 		err := json.Unmarshal([]byte(v), order)
+ 		if err != nil {
++			liveCaptureHealth.marketCount("invalid", 1)
+ 			log.Errorf("Problem converting market order to internal struct: %v", err)
+ 			continue
+ 		}
+ 
+-		// Set the location only if its string(nil). Smugglers Dens pull locations directly from the market data (above)
+-		// while the orignal cities have a null location ID and is pulled from the client state.
+-		if order.LocationID == "" {
+-			order.LocationID = state.LocationId
+-		}
+-
++		// Preserve missing auction IDs for the relay's physical-city fallback.
+ 		orders = append(orders, order)
+ 		auctionOfferCache.put(order)
+ 	}
+ 
++	if len(orders) < 1 {
++		return
++	}
++
++	// Explicit auction locations are usable even when capture started after
++	// the character's Join response. Never make the local relay wait on AODP.
++	BroadcastMarketOrders(orders, state.LocationId)
+ 	if !state.IsValidLocation() {
+ 		return
+ 	}
+-
+-	if len(orders) < 1 {
+-		return
++	for _, order := range orders {
++		if order.LocationID == "" {
++			order.LocationID = state.LocationId
++		}
+ 	}
+ 
+ 	upload := lib.MarketUpload{
+@@ -94,5 +101,4 @@
+ 	log.Infof("Sending %d live market sell orders to ingest (Identifier: %s)", len(orders), identifier)
+ 	sendMsgToPublicUploaders(upload, lib.NatsMarketOrdersIngest, state, identifier.String())
+ 
+-	BroadcastMarketOrders(orders, state.LocationId)
+ }
+--- a/client/operation_auction_get_requests.go
++++ b/client/operation_auction_get_requests.go
+@@ -14,10 +14,8 @@
+ 
+ func (op operationAuctionGetRequestsResponse) Process(state *albionState) {
+ 	log.Debug("Got response to AuctionGetOffers operation...")
+-
+-	if !state.IsValidLocation() {
+-		return
+-	}
++	liveCaptureHealth.marketCount("response", 1)
++	liveCaptureHealth.marketCount("rows", uint64(len(op.MarketOrders)))
+ 
+ 	var orders []*lib.MarketOrder
+ 
+@@ -26,18 +24,25 @@
+ 
+ 		err := json.Unmarshal([]byte(v), order)
+ 		if err != nil {
++			liveCaptureHealth.marketCount("invalid", 1)
+ 			log.Errorf("Problem converting market order to internal struct: %v", err)
+ 			continue
+ 		}
+ 
+-		if order.LocationID == "" {
+-			order.LocationID = state.LocationId
+-		}
+ 		orders = append(orders, order)
+ 	}
+ 
+ 	if len(orders) < 1 {
+ 		return
++	}
++	BroadcastMarketOrders(orders, state.LocationId)
++	if !state.IsValidLocation() {
++		return
++	}
++	for _, order := range orders {
++		if order.LocationID == "" {
++			order.LocationID = state.LocationId
++		}
+ 	}
+ 
+ 	upload := lib.MarketUpload{
+@@ -47,5 +52,4 @@
+ 	identifier, _ := uuid.NewV4()
+ 	log.Infof("Sending %d live market buy orders to ingest (Identifier: %s)", len(orders), identifier)
+ 	sendMsgToPublicUploaders(upload, lib.NatsMarketOrdersIngest, state, identifier.String())
+-	BroadcastMarketOrders(orders, state.LocationId)
+ }

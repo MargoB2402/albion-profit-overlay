@@ -76,6 +76,9 @@ export default function App() {
             }
             if (evt.type === 'market_view') {
                 setAgentMarketCity(MARKET_CITIES.includes(evt.payload?.city) ? evt.payload.city : 'unknown');
+                // Process every frame synchronously: lastEvent is display state,
+                // and React may batch it away when another frame follows.
+                if (isLoggedIn) contributeOrders({ city: evt.payload?.city, orders: evt.payload?.orders });
             }
             // market_view НЕ переключает вкладку — агент только передаёт товарную позицию
         },
@@ -83,15 +86,6 @@ export default function App() {
 
     // Collection belongs to the app, so changing tabs, opening settings or
     // collapsing the panel never stops processing the auction page.
-    useEffect(() => {
-        if (lastEvent?.type !== 'market_view' || !isLoggedIn) return;
-        const payload = lastEvent.payload || {};
-        // OCR may see our own panel or an old market title. It must never decide
-        // the destination of an uploaded quote, even before the first zone join.
-        const marketCity = payload.city;
-        if (!MARKET_CITIES.includes(marketCity)) return;
-        contributeOrders({ city: marketCity, orders: payload.orders });
-    }, [lastEvent, isLoggedIn, contributeOrders]);
 
     const toggleMinimize = useCallback(() => {
         const next = !minimized;

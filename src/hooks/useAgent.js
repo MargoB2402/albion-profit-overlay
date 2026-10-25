@@ -25,7 +25,10 @@ export function useAgent({ onConnect, onDisconnect, onEvent }) {
             ws.onmessage = (msg) => {
                 try {
                     const evt = JSON.parse(msg.data);
-                    if(evt.type==='capture_status')setCaptureStatus({...evt.payload,receivedAt:Date.now()});else setLastEvent(evt);
+                    if(evt.type==='capture_status')setCaptureStatus({...evt.payload,receivedAt:Date.now()});
+                    // PriceWidget consumes the latest market selection. Loot,
+                    // location and activity frames must not erase that selection.
+                    else if(evt.type==='market_view')setLastEvent(evt);
                     callbacks.current.onEvent?.(evt);
                 } catch {}
             };

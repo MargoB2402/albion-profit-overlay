@@ -575,6 +575,7 @@ async function handleAgentWsMessage(msg) {
     if (!type || !payload) return;
     if(type==='capture_status'){
         latestCapture=payload;
+        diagnostics().market(payload);
         if(payload.state==='receiving'||Date.now()-captureStartedAt>60000)diagnostics().state('capture',payload.state,payload);
         return;
     }
