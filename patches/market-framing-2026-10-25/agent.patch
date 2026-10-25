@@ -1,0 +1,233 @@
+--- a/client/photon/parser.go
++++ b/client/photon/parser.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"bytes"
+ 	"encoding/binary"
++	"hash/crc32"
+ 	"time"
+ )
+ 
+@@ -94,29 +95,62 @@
+ 	if len(payload) < photonHeaderLength {
+ 		return false
+ 	}
+-	p.peer = binary.BigEndian.Uint16(payload[:2])
+-	p.challenge = binary.BigEndian.Uint32(payload[8:12])
+-
+-	offset := 2 // skip peerId (2 bytes)
+-	flags := payload[offset]
+-	offset++
+-	commandCount := int(payload[offset])
+-	offset++
+-	offset += 8 // skip timestamp (4) + challenge (4)
+-
+-	if flags == 1 {
+-		if p.OnEncrypted != nil {
+-			p.OnEncrypted()
+-		}
+-		return false
+-	}
+-
+-	for i := 0; i < commandCount; i++ {
+-		var ok bool
+-		offset, ok = p.handleCommand(payload, offset)
+-		if !ok {
++	peer := binary.BigEndian.Uint16(payload[:2])
++	challenge := binary.BigEndian.Uint32(payload[8:12])
++	// A capture buffer can contain consecutive Photon packets. Parse declared
++	// command boundaries, never scan arbitrary message bytes for a header.
++	for start := 0; start < len(payload); {
++		if !available(payload, start, photonHeaderLength) || binary.BigEndian.Uint16(payload[start:]) != peer || binary.BigEndian.Uint32(payload[start+8:]) != challenge {
+ 			return false
+ 		}
++		flags, count := payload[start+2], int(payload[start+3])
++		if flags == 1 {
++			if p.OnEncrypted != nil {
++				p.OnEncrypted()
++			}
++			return false
++		}
++		if flags != 0 && flags != 0xcc {
++			return false
++		}
++		header := photonHeaderLength
++		if flags == 0xcc {
++			header += 4
++		}
++		if !available(payload, start, header) {
++			return false
++		}
++		end := start + header
++		for i := 0; i < count; i++ {
++			if !available(payload, end, commandHeaderLength) {
++				return false
++			}
++			size := int(binary.BigEndian.Uint32(payload[end+4:]))
++			if size < commandHeaderLength || !available(payload, end, size) {
++				return false
++			}
++			end += size
++		}
++		packet := payload[start:end]
++		if flags == 0xcc {
++			check := append([]byte(nil), packet...)
++			for i := 12; i < 16; i++ {
++				check[i] = 0
++			}
++			if binary.BigEndian.Uint32(packet[12:16]) != ^crc32.ChecksumIEEE(check) {
++				return false
++			}
++		}
++		p.peer, p.challenge = peer, challenge
++		offset := header
++		for i := 0; i < count; i++ {
++			var ok bool
++			offset, ok = p.handleCommand(packet, offset)
++			if !ok {
++				return false
++			}
++		}
++		start = end
+ 	}
+ 	return true
+ }
+--- /dev/null
++++ b/client/photon/framing_test.go
+@@ -0,0 +1,95 @@
++package photon
++
++import (
++	"encoding/binary"
++	"hash/crc32"
++	"testing"
++)
++
++func framingPacket(code byte) []byte {
++	b := make([]byte, 29)
++	b[3], b[12] = 1, cmdSendReliable
++	binary.BigEndian.PutUint32(b[16:], 17)
++	copy(b[24:], []byte{0, MsgResponse, code, 0, 0})
++	return b
++}
++
++func crcPacket(b []byte) []byte {
++	out := append(append(append([]byte{}, b[:12]...), 0, 0, 0, 0), b[12:]...)
++	out[2] = 0xcc
++	binary.BigEndian.PutUint32(out[12:], ^crc32.ChecksumIEEE(out))
++	return out
++}
++
++func TestCoalescedPacketsDeliverEveryResponse(t *testing.T) {
++	for _, crc := range []bool{false, true} {
++		calls := 0
++		p := NewPhotonParser(nil, func(code byte, _ int16, _ string, _ map[byte]interface{}) {
++			calls++
++			if int(code) != calls {
++				t.Errorf("response order: got %d want %d", code, calls)
++			}
++		}, nil)
++		var batch []byte
++		for i := byte(1); i <= 20; i++ {
++			b := framingPacket(i)
++			if crc {
++				b = crcPacket(b)
++			}
++			batch = append(batch, b...)
++		}
++		if !p.ReceivePacket(batch) || calls != 20 {
++			t.Fatalf("crc=%v delivered %d of 20 responses", crc, calls)
++		}
++	}
++}
++
++func TestCoalescedFragmentsKeepAssemblyIdentity(t *testing.T) {
++	message := []byte{0, MsgResponse, 75, 0, 0, 0x47, 1, 2, '{', '}'}
++	for _, crc := range []bool{false, true} {
++		calls := 0
++		p := NewPhotonParser(nil, func(_ byte, _ int16, _ string, params map[byte]interface{}) {
++			calls++
++			orders, ok := params[0].([]string)
++			if !ok || len(orders) != 1 || orders[0] != "{}" {
++				t.Errorf("corrupt orders: %v", params)
++			}
++		}, nil)
++		var batch []byte
++		for i := 1; i >= 0; i-- {
++			b := fragmentPacket(2, 100, 2, uint32(i), uint32(len(message)), uint32(i*5), message[i*5:i*5+5])
++			b[1] = 9
++			binary.BigEndian.PutUint32(b[8:], 123)
++			if crc {
++				b = crcPacket(b)
++			}
++			batch = append(batch, b...)
++		}
++		if !p.ReceivePacket(batch) || calls != 1 {
++			t.Fatalf("crc=%v lost coalesced fragments, calls=%d", crc, calls)
++		}
++	}
++}
++
++func TestFramingRejectsBadCRCIdentityAndTruncation(t *testing.T) {
++	for _, kind := range []string{"crc", "identity", "short"} {
++		calls := 0
++		p := NewPhotonParser(nil, func(_ byte, _ int16, _ string, _ map[byte]interface{}) { calls++ }, nil)
++		first, next := framingPacket(1), framingPacket(2)
++		switch kind {
++		case "crc":
++			first = crcPacket(first)
++			first[12] ^= 1
++		case "identity":
++			next[1] = 1
++		case "short":
++			next = next[:len(next)-1]
++		}
++		if p.ReceivePacket(append(first, next...)) {
++			t.Errorf("accepted %s", kind)
++		}
++		if kind == "crc" && calls != 0 || kind != "crc" && calls != 1 {
++			t.Errorf("%s calls=%d", kind, calls)
++		}
++	}
++}
+--- /dev/null
++++ b/client/capture_coalesced_test.go
+@@ -0,0 +1,38 @@
++package client
++
++import (
++	"encoding/binary"
++	"testing"
++	"time"
++
++	"github.com/ao-data/albiondata-client/client/photon"
++)
++
++func TestCoalescedMarketResponsesThroughCapture(t *testing.T) {
++	row := `{"ItemTypeId":"T4_BAG","LocationId":"4002","UnitPriceSilver":10000,"Amount":1,"QualityLevel":1}`
++	var batch []byte
++	for i := 0; i < 20; i++ {
++		body := append([]byte{0, 0, 0x47, 1, byte(len(row))}, []byte(row)...)
++		batch = append(batch, buildPhotonPacket(photon.MsgResponse, byte(opAuctionGetOffers), body)...)
++	}
++	udp := make([]byte, 8)
++	binary.BigEndian.PutUint16(udp, 5056)
++	binary.BigEndian.PutUint16(udp[2:], 6000)
++	binary.BigEndian.PutUint16(udp[4:], uint16(8+len(batch)))
++	p := newCapturePipeline(newRouter(), &captureHealth{})
++	at := time.Now()
++	before := liveCaptureHealth.snapshot(at)
++	p.accept("adapter", ipFragmentFixture(t, 99, 0, false, append(udp, batch...)), at)
++	for i := 0; i < 20; i++ {
++		select {
++		case op := <-p.processor.router.newOperation:
++			op.Process(p.processor.router.albionstate)
++		default:
++			t.Fatalf("only %d of 20 market responses reached the router", i)
++		}
++	}
++	after := liveCaptureHealth.snapshot(at)
++	if after.MarketRows-before.MarketRows != 20 || after.MarketResponses-before.MarketResponses != 20 {
++		t.Fatal("coalesced rows lost", before, after)
++	}
++}

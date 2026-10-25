@@ -1,5 +1,24 @@
 # Release notes
 
+## Windows 1.10.4 - 2026-10-25
+
+[Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.4)
+
+Windows 1.10.4 fixes Photon packet framing in captured game traffic.
+
+- Consecutive packets in one capture payload are all decoded. Previously only the first packet was read, silently discarding the remainder and preventing fragmented responses from completing.
+- CRC-enabled packet headers are validated. Incorrect CRC, mismatched connection identity and truncated command framing are rejected.
+- Existing unique-coverage message reassembly and IPv4 fragment capture remain intact.
+
+Regression tests reproduced the old decoder delivering only 1 of 20 consecutive responses and losing a response split across coalesced packets. The fixed decoder passes those cases with and without CRC, malformed-input cases and full capture-to-market processing. All client/photon regressions and protected UI delivery/private-mode checks in seven languages pass.
+
+The player's 1.10.3 timeline still shows 66 market requests, 8 responses and 1 row. Local health shows zero IPv4 fragments, so the prior IP fix was not involved in that session. These are confirmed implementation defects, but confirmation on the affected PC is still pending; no claim is made that a VPN, ISP or antivirus is the cause.
+
+Install the EXE over the previous version, or restart the overlay, allow the update to download and choose Restart Now. Browse a full market page. If the issue remains, send a new support report and the local http://127.0.0.1:9999/health contents after seven minutes of capture.
+
+Includes installer, updater manifest/blockmap, matching open-source agent and checksums. Private application sources and obfuscation maps are excluded. Older releases remain available for rollback.
+
+
 ## Windows 1.10.3 - 2026-10-25
 
 [Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.3)

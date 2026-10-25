@@ -1,6 +1,6 @@
 {
   "name": "albion-profit-overlay",
-  "version": "1.10.3",
+  "version": "1.10.4",
   "description": "Albion Profit — Game Overlay",
   "main": "main.js",
   "scripts": {
