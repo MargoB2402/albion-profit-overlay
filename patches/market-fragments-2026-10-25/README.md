@@ -1,0 +1,1 @@
+Open-source agent changes against APH-Agent-1.10.1-source.zip. Includes unique fragment coverage, connection/channel isolation, bounded assembly, gathering identification and regression tests. The complete matching agent source is attached to v1.10.2. Private application source is not included.

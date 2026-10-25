@@ -1,0 +1,466 @@
+--- a/client/activity_capture.go
++++ b/client/activity_capture.go
+@@ -8,11 +8,16 @@
+ 
+ // Own-player facts only; no nearby-player position or speculative inventory gains.
+ type activityCapture struct {
+-	self             int64
+-	player, location string
+-	positionAt       int64
+-	emit             func(map[string]interface{})
+-	fishing          activityFishing
++	self                           int64
++	player, location               string
++	positionAt                     int64
++	emit                           func(map[string]interface{})
++	fishing                        activityFishing
++	events, recorded, unidentified uint64
++}
++
++func (a *activityCapture) status() {
++	liveCaptureHealth.activityState(a.self != 0 && a.player != "" && a.location != "", a.events, a.recorded, a.unidentified)
+ }
+ 
+ func activityNumber(v interface{}) float64 {
+@@ -53,7 +58,7 @@
+ 	return out
+ }
+ func (a *activityCapture) record(kind string, at int64, values map[string]interface{}) {
+-	if a.self <= 0 || a.player == "" || a.location == "" {
++	if a.self == 0 || a.player == "" || a.location == "" {
+ 		return
+ 	}
+ 	id, err := uuid.NewV4()
+@@ -67,20 +72,25 @@
+ 	a.emit(values)
+ }
+ func (a *activityCapture) response(code uint16, rc int16, p map[byte]interface{}, at int64) {
++	defer a.status()
+ 	a.fishing.response(a, code, rc, p, at)
+-	if code != 2 || rc != 0 {
++	if rc != 0 || (code != 2 && farmGuid(p[1]) == "") {
+ 		return
+ 	}
+ 	name, _ := p[2].(string)
+ 	zone, _ := p[8].(string)
+ 	id := farmInt(p[0])
+-	if id <= 0 || name == "" || zone == "" {
++	if id == 0 || name == "" || len(name) > 160 || !validLootLocation(zone) {
+ 		return
+ 	}
+ 	a.self, a.player, a.location, a.positionAt = id, name, zone, 0
++	if code != 2 {
++		a.fishing.response(a, 2, 0, p, at)
++	}
+ 	a.record("travel", at, nil)
+ }
+ func (a *activityCapture) request(code uint16, p map[byte]interface{}, at int64) {
++	defer a.status()
+ 	a.fishing.request(code, p, at)
+ 	if code == 2 {
+ 		a.self = 0
+@@ -106,8 +116,15 @@
+ 	a.record("position", at, map[string]interface{}{"x": x, "y": y})
+ }
+ func (a *activityCapture) event(code uint16, p map[byte]interface{}, at int64) {
++	defer a.status()
++	if code == 61 {
++		a.events++
++		if a.self == 0 {
++			a.unidentified++
++		}
++	}
+ 	a.fishing.event(a, code, p, at)
+-	if a.self <= 0 {
++	if a.self == 0 {
+ 		return
+ 	}
+ 	switch code {
+@@ -121,6 +138,7 @@
+ 			return
+ 		}
+ 		a.record("gather", at, map[string]interface{}{"itemType": item, "quantity": n, "quality": 1, "baseQuantity": base, "bonusQuantity": bonus + premium})
++		a.recorded++
+ 	case 6:
+ 		a.health(p[0], p[2], p[6], p[7], at)
+ 	case 7:
+--- a/client/activity_capture_test.go
++++ b/client/activity_capture_test.go
+@@ -1,6 +1,28 @@
+ package client
+ 
+ import "testing"
++
++func TestActivitySignedActorAndJoinShape(t *testing.T) {
++	var rows []map[string]interface{}
++	a := &activityCapture{emit: func(r map[string]interface{}) { rows = append(rows, r) }}
++	p := map[byte]interface{}{0: int64(-57), 1: "11111111-1111-1111-1111-111111111111", 2: "Me", 8: "0007"}
++	a.response(500, 1, p, 1000)
++	if a.self != 0 {
++		t.Fatal("failed response established identity")
++	}
++	delete(p, 1)
++	a.response(500, 0, p, 1001)
++	if a.self != 0 {
++		t.Fatal("partial non-Join response established identity")
++	}
++	p[1] = "11111111-1111-1111-1111-111111111111"
++	a.response(500, 0, p, 1002)
++	a.event(61, map[byte]interface{}{0: int64(-58), 4: int64(99), 5: int64(2)}, 1003)
++	a.event(61, map[byte]interface{}{0: int64(-57), 4: int64(99), 5: int64(2), 6: int64(1), 7: int64(1)}, 1004)
++	if len(rows) != 2 || rows[1]["quantity"] != int64(4) || a.recorded != 1 {
++		t.Fatal("signed own actor must retain ownership and bonuses", rows)
++	}
++}
+ 
+ func TestActivityOwnGatherCombatAndZoneReset(t *testing.T) {
+ 	var rows []map[string]interface{}
+@@ -10,7 +32,13 @@
+ 	if len(rows) != 0 {
+ 		t.Fatal("unidentified player")
+ 	}
++	if a.events != 1 || a.unidentified != 1 || liveCaptureHealth.s.ActivityReady {
++		t.Fatal("mid-session capture must report waiting for identity, not recording readiness")
++	}
+ 	a.response(2, 0, map[byte]interface{}{0: int64(7), 2: "Me", 8: "0007"}, at)
++	if !liveCaptureHealth.s.ActivityReady {
++		t.Fatal("zone transition must initialize capture")
++	}
+ 	a.event(61, map[byte]interface{}{0: int64(8), 4: int64(99), 5: int64(2)}, at)
+ 	if len(rows) != 1 {
+ 		t.Fatal("other gatherer")
+@@ -32,4 +60,7 @@
+ 	if len(rows) != 4 {
+ 		t.Fatal("join reset")
+ 	}
++	if liveCaptureHealth.s.ActivityReady || a.recorded != 1 || a.unidentified != 2 {
++		t.Fatal("zone reset and own-harvest diagnostics")
++	}
+ }
+--- a/client/capture_health.go
++++ b/client/capture_health.go
+@@ -25,6 +25,10 @@
+ 	MarketJsonErrors       uint64 `json:"marketJsonErrors"`
+ 	MarketUnknownLocations uint64 `json:"marketUnknownLocations"`
+ 	MarketInvalidOrders    uint64 `json:"marketInvalidOrders"`
++	ActivityReady          bool   `json:"activityReady"`
++	ActivityEvents         uint64 `json:"activityEvents"`
++	ActivityRecorded       uint64 `json:"activityRecorded"`
++	ActivityUnidentified   uint64 `json:"activityUnidentified"`
+ }
+ type captureHealth struct {
+ 	sync.Mutex
+@@ -34,6 +38,12 @@
+ }
+ 
+ var liveCaptureHealth = &captureHealth{}
++
++func (h *captureHealth) activityState(ready bool, events, recorded, unidentified uint64) {
++	h.Lock()
++	h.s.ActivityReady, h.s.ActivityEvents, h.s.ActivityRecorded, h.s.ActivityUnidentified = ready, events, recorded, unidentified
++	h.Unlock()
++}
+ 
+ // Only aggregate counts leave the agent, never orders or packet contents.
+ func (h *captureHealth) marketCount(kind string, n uint64) {
+--- a/client/photon/parser.go
++++ b/client/photon/parser.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"bytes"
+ 	"encoding/binary"
++	"time"
+ )
+ 
+ const (
+@@ -31,9 +32,19 @@
+ )
+ 
+ type segmentedPackage struct {
+-	totalLength  int
+-	bytesWritten int
+-	payload      []byte
++	totalLength   int
++	bytesWritten  int
++	payload       []byte
++	covered       []byte
++	fragmentCount int
++	at            time.Time
++}
++
++type segmentKey struct {
++	peer      uint16
++	challenge uint32
++	channel   byte
++	sequence  uint32
+ }
+ 
+ // RawPacket holds the raw UDP/TCP payload of one Photon packet.
+@@ -46,7 +57,9 @@
+ // decoded operation or event. It is a port of PhotonParser.cs from
+ // https://github.com/JPCodeCraft/AlbionDataAvalonia.
+ type PhotonParser struct {
+-	pendingSegments map[int]*segmentedPackage
++	pendingSegments map[segmentKey]*segmentedPackage
++	peer            uint16
++	challenge       uint32
+ 
+ 	// OnRequest is called for every decoded OperationRequest.
+ 	OnRequest func(operationCode byte, params map[byte]interface{})
+@@ -68,7 +81,7 @@
+ 	onEvent func(byte, map[byte]interface{}),
+ ) *PhotonParser {
+ 	return &PhotonParser{
+-		pendingSegments: make(map[int]*segmentedPackage),
++		pendingSegments: make(map[segmentKey]*segmentedPackage),
+ 		OnRequest:       onRequest,
+ 		OnResponse:      onResponse,
+ 		OnEvent:         onEvent,
+@@ -81,6 +94,8 @@
+ 	if len(payload) < photonHeaderLength {
+ 		return false
+ 	}
++	p.peer = binary.BigEndian.Uint16(payload[:2])
++	p.challenge = binary.BigEndian.Uint32(payload[8:12])
+ 
+ 	offset := 2 // skip peerId (2 bytes)
+ 	flags := payload[offset]
+@@ -113,6 +128,7 @@
+ 
+ 	cmdType := src[offset]
+ 	offset++
++	channel := src[offset]
+ 	offset++ // channelId
+ 	offset++ // commandFlags
+ 	offset++ // reserved byte
+@@ -143,7 +159,7 @@
+ 		return newOffset, true
+ 
+ 	case cmdSendFragment:
+-		return p.handleSendFragment(src, offset, cmdLen), true
++		return p.handleSendFragment(src, offset, cmdLen, channel), true
+ 
+ 	default:
+ 		return offset + cmdLen, true
+@@ -246,16 +262,19 @@
+ 	}
+ }
+ 
+-func (p *PhotonParser) handleSendFragment(src []byte, offset, cmdLen int) int {
++func (p *PhotonParser) handleSendFragment(src []byte, offset, cmdLen int, channel byte) int {
+ 	if cmdLen < fragmentHeaderLength || !available(src, offset, fragmentHeaderLength) {
+ 		return offset + cmdLen
+ 	}
+ 
+-	startSeq := int(binary.BigEndian.Uint32(src[offset:]))
++	endCommand := offset + cmdLen
++	startSeq := binary.BigEndian.Uint32(src[offset:])
+ 	offset += 4
+ 	cmdLen -= 4
++	count := int(binary.BigEndian.Uint32(src[offset:]))
+ 	offset += 4 // fragmentCount
+ 	cmdLen -= 4
++	number := int(binary.BigEndian.Uint32(src[offset:]))
+ 	offset += 4 // fragmentNumber
+ 	cmdLen -= 4
+ 	totalLen := int(binary.BigEndian.Uint32(src[offset:]))
+@@ -266,32 +285,60 @@
+ 	cmdLen -= 4
+ 
+ 	fragLen := cmdLen
+-	if fragLen < 0 || !available(src, offset, fragLen) {
+-		return offset + fragLen
+-	}
+-
+-	seg, ok := p.pendingSegments[startSeq]
++	if totalLen < 2 || totalLen > 1024*1024 || count < 1 || count > 4096 || number < 0 || number >= count || fragLen < 1 || fragOffset < 0 || fragOffset > totalLen-fragLen || !available(src, offset, fragLen) {
++		return endCommand
++	}
++	key := segmentKey{p.peer, p.challenge, channel, startSeq}
++	now := time.Now()
++	for k, v := range p.pendingSegments {
++		if now.Sub(v.at) > 30*time.Second {
++			delete(p.pendingSegments, k)
++		}
++	}
++	seg, ok := p.pendingSegments[key]
++	if ok && (seg.totalLength != totalLen || seg.fragmentCount != count) {
++		delete(p.pendingSegments, key)
++		return endCommand
++	}
+ 	if !ok {
++		if len(p.pendingSegments) >= 8 {
++			var oldest segmentKey
++			var oldestAt time.Time
++			for k, v := range p.pendingSegments {
++				if oldestAt.IsZero() || v.at.Before(oldestAt) {
++					oldest, oldestAt = k, v.at
++				}
++			}
++			delete(p.pendingSegments, oldest)
++		}
+ 		seg = &segmentedPackage{
+-			totalLength: totalLen,
+-			payload:     make([]byte, totalLen),
+-		}
+-		p.pendingSegments[startSeq] = seg
+-	}
+-
+-	end := fragOffset + fragLen
+-	if end <= len(seg.payload) {
+-		copy(seg.payload[fragOffset:end], src[offset:offset+fragLen])
+-	}
+-	offset += fragLen
+-	seg.bytesWritten += fragLen
+-
+-	if seg.bytesWritten >= seg.totalLength {
+-		delete(p.pendingSegments, startSeq)
++			totalLength:   totalLen,
++			payload:       make([]byte, totalLen),
++			covered:       make([]byte, (totalLen+7)/8),
++			fragmentCount: count, at: now,
++		}
++		p.pendingSegments[key] = seg
++	}
++	for i, value := range src[offset : offset+fragLen] {
++		pos := fragOffset + i
++		mask := byte(1 << uint(pos%8))
++		if seg.covered[pos/8]&mask != 0 {
++			if seg.payload[pos] != value {
++				delete(p.pendingSegments, key)
++				return endCommand
++			}
++		} else {
++			seg.covered[pos/8] |= mask
++			seg.payload[pos] = value
++			seg.bytesWritten++
++		}
++	}
++	if seg.bytesWritten == seg.totalLength {
++		delete(p.pendingSegments, key)
+ 		p.handleSendReliable(seg.payload, 0, len(seg.payload))
+ 	}
+ 
+-	return offset
++	return endCommand
+ }
+ 
+ // available reports whether src[offset:offset+count] is in bounds.
+--- /dev/null
++++ b/client/photon/fragments_test.go
+@@ -0,0 +1,115 @@
++package photon
++
++import (
++	"encoding/binary"
++	"reflect"
++	"strings"
++	"testing"
++)
++
++func fragmentPacket(channel byte, seq, count, number, total, offset uint32, part []byte) []byte {
++	b := make([]byte, 44+len(part))
++	b[3] = 1
++	b[12] = 8
++	b[13] = channel
++	binary.BigEndian.PutUint32(b[16:], uint32(32+len(part)))
++	for i, v := range []uint32{seq, count, number, total, offset} {
++		binary.BigEndian.PutUint32(b[24+i*4:], v)
++	}
++	copy(b[44:], part)
++	return b
++}
++
++func TestLargeMarketPageOutOfOrderWithRetransmissions(t *testing.T) {
++	orders := make([]string, 20)
++	message := []byte{0, MsgResponse, 75, 0, 0, 0x47, 20}
++	for i := range orders {
++		orders[i] = `{"ItemTypeId":"T4_BAG","UnitPriceSilver":10000,"LocationId":"4000","Padding":"` + strings.Repeat("x", 400) + `"}`
++		n := uint32(len(orders[i]))
++		for n >= 128 {
++			message = append(message, byte(n)|128)
++			n >>= 7
++		}
++		message = append(message, byte(n))
++		message = append(message, orders[i]...)
++	}
++	calls := 0
++	p := NewPhotonParser(nil, func(_ byte, _ int16, _ string, params map[byte]interface{}) {
++		calls++
++		if !reflect.DeepEqual(params[0], orders) {
++			t.Fatal("market page corrupted")
++		}
++	}, nil)
++	const chunk = 600
++	count := (len(message) + chunk - 1) / chunk
++	for i := count - 1; i >= 0; i-- {
++		start := i * chunk
++		end := start + chunk
++		if end > len(message) {
++			end = len(message)
++		}
++		b := fragmentPacket(2, 99, uint32(count), uint32(i), uint32(len(message)), uint32(start), message[start:end])
++		p.ReceivePacket(b)
++		if i > 0 {
++			p.ReceivePacket(b)
++		}
++	}
++	if calls != 1 {
++		t.Fatal("large page must arrive exactly once after complete coverage", calls)
++	}
++}
++
++func TestFragmentBoundsAndConflictingOverlap(t *testing.T) {
++	p := NewPhotonParser(nil, nil, nil)
++	for _, b := range [][]byte{fragmentPacket(0, 1, 2, 0, 0xffffffff, 0, []byte{1}), fragmentPacket(0, 2, 0, 0, 10, 0, []byte{1}), fragmentPacket(0, 3, 2, 0, 10, 11, []byte{1})} {
++		p.ReceivePacket(b)
++	}
++	if len(p.pendingSegments) != 0 {
++		t.Fatal("malformed fragment allocated an assembly")
++	}
++	p.ReceivePacket(fragmentPacket(0, 4, 2, 0, 10, 0, []byte{1, 2, 3}))
++	p.ReceivePacket(fragmentPacket(0, 4, 2, 1, 10, 2, []byte{4, 5, 6}))
++	if len(p.pendingSegments) != 0 {
++		t.Fatal("conflicting overlap retained an assembly")
++	}
++	for i := uint32(10); i < 30; i++ {
++		p.ReceivePacket(fragmentPacket(0, i, 2, 0, 10, 0, []byte{1}))
++	}
++	if len(p.pendingSegments) > 8 {
++		t.Fatal("unbounded incomplete assemblies")
++	}
++}
++
++func TestFragmentsRequireUniqueCoverage(t *testing.T) {
++	// A response split in the middle of a string, including a retransmission.
++	message := []byte{0, 3, 2, 0, 0, 8, 1, 8, 7, 4, 'z', 'o', 'n', 'e'}
++	calls := 0
++	var zone interface{}
++	p := NewPhotonParser(nil, func(_ byte, _ int16, _ string, params map[byte]interface{}) { calls++; zone = params[8] }, nil)
++	a := fragmentPacket(0, 7, 2, 0, uint32(len(message)), 0, message[:7])
++	b := fragmentPacket(0, 7, 2, 1, uint32(len(message)), 7, message[7:])
++	p.ReceivePacket(a)
++	p.ReceivePacket(a)
++	if calls != 0 {
++		t.Fatal("duplicate fragment delivered an incomplete market response")
++	}
++	p.ReceivePacket(b)
++	if calls != 1 || zone != "zone" {
++		t.Fatal("full response not recovered after retransmission", calls, zone)
++	}
++}
++
++func TestFragmentChannelsDoNotMix(t *testing.T) {
++	message := []byte{0, 3, 2, 0, 0, 8, 1, 8, 7, 4, 'z', 'o', 'n', 'e'}
++	calls := 0
++	p := NewPhotonParser(nil, func(byte, int16, string, map[byte]interface{}) { calls++ }, nil)
++	p.ReceivePacket(fragmentPacket(0, 7, 2, 0, 14, 0, message[:7]))
++	p.ReceivePacket(fragmentPacket(1, 7, 2, 1, 14, 7, message[7:]))
++	if calls != 0 {
++		t.Fatal("fragments from different channels were mixed")
++	}
++	p.ReceivePacket(fragmentPacket(0, 7, 2, 1, 14, 7, message[7:]))
++	if calls != 1 {
++		t.Fatal("valid same-channel response missing")
++	}
++}
