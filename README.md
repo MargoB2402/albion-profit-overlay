@@ -1,5 +1,22 @@
 # albion-profit-overlay
 
+## Windows 1.10.2
+
+[Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.2)
+
+Windows 1.10.2 improves gathering character identification and capture status.
+
+- Accepts signed own-player IDs and validates complete zone-entry responses while preserving ownership checks.
+- The free gathering tab distinguishes disconnected capture from a character that has not yet been identified. If capture starts after entering a zone, change zones or reconnect with capture running, then continue gathering.
+- Seven-language guidance and counters show received harvest events, recognized own harvest and events skipped before identification. Previously missed harvest is not reconstructed.
+
+Update: restart the overlay, allow the update to download and choose Restart Now. Alternatively, run the attached installer over the previous version; settings are preserved. Existing private-price mode, market fixes and subscription gates are retained.
+
+Go regressions, session/valuation tests, protected renderer checks and installer contents passed. Confirmation of the originally reported in-game gathering issue is still pending; the old support timeline did not contain gathering-stage counters. This release does not claim that every gathering failure has been reproduced.
+
+Includes the protected installer, updater blockmap/latest.yml, matching open-source agent archive and SHA256SUMS.txt. Npcap remains required.
+
+
 ## Windows 1.10.0 — Gathering and fishing
 
 [Download the Windows installer](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.0).
