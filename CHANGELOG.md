@@ -1,5 +1,16 @@
 # Release notes
 
+## 1.10.1 - 2026-10-25
+
+- Fixed ordinary market rows without an auction ID by resolving known physical city IDs, including Fort Sterling. Explicit unknown markets remain rejected.
+- Market orders with an explicit auction no longer wait for a character Join response or AODP upload before reaching the overlay.
+- Market frames are processed individually and are no longer replaced by loot/activity events in React. Collection continues across tabs and while minimized, preserving private mode.
+- Added numeric market-processing diagnostics without item lists or prices in support reports.
+
+Restart the overlay to check for the update, then choose Restart Now when the downloaded update is ready. Installing the EXE manually over the current version also preserves settings.
+
+Validation: Go regressions; 20 Node tests; protected renderer in Chrome across seven languages, private mode, 45 market entries, tabs and minimized view. Live confirmation on the affected player's machine remains pending.
+
 ## 1.10.0 — 2026-10-24
 
 - Free Gathering tab with local recording sessions, grouped resource/fish stacks and expandable observation history.

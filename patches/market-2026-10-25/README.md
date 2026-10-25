@@ -1,4 +1,4 @@
-# Windows market capture fix (unreleased)
+# Windows market capture fix (1.10.1)
 
 This branch fixes ordinary market rows with no auction LocationId: physical city IDs from Join (Fort Sterling 4000 versus its auction 4002) now resolve through the known city mapping. Explicit unknown auction IDs remain rejected. Explicit known auction rows reach the local overlay before Join and before AODP upload.
 
@@ -10,4 +10,4 @@ The updated `assets/agent.exe` was built from those sources with `go build -trim
 
 Validation: Go client tests; 20 Node diagnostic/market/ingestion tests; Chrome across RU/EN/DE/ES/FR/IT/PT at 360 px, 45 distinct market quotes interleaved with other events, tab switching, minimized view and private mode. Vite production build and Node syntax checks passed. Live verification on the reporting player's machine remains pending.
 
-This is a source/bundled-agent fix, not a published installer release. The version, updater manifest, trusted installer registration and production website were not changed. Installed clients require a subsequent protected application release containing both the renderer and agent fixes.
+The protected installer release 1.10.1 contains both the renderer and agent fixes. Its ASAR hash is registered through the existing trusted-build API. Website release notes and the seven-language release feed are prepared separately; publishing GitHub does not deploy the website.
