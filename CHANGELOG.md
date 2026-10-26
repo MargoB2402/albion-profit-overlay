@@ -1,3 +1,15 @@
+# Windows 1.10.5 - 2026-10-26
+
+Windows 1.10.5 — world zone names
+
+The location badge now shows ordinary zones outside cities, using the same existing world catalog as Android 0.9.4. Both the expanded and collapsed panel update on zone changes. Unknown zones show their ID.
+
+The bundled capture agent now includes the raw location ID in its local WebSocket location event. Display names remain separate from the validated auction city; zone names do not become market-price destinations. Photon framing, CRC validation, IP reassembly and private-price delivery remain unchanged.
+
+Checks: client and Photon Go suites; world-name/market-isolation tests; the protected production UI in seven languages with market bursts, private-mode delivery, tab changes, collapsed view and a non-city zone transition. The shipped agent matches the build output; matching complete open-agent source is included. No physical live-game retest has been performed for this update.
+
+Русский: панель теперь показывает названия зон вне городов, в том числе в свёрнутом виде. Название зоны используется только для отображения; город для рыночных цен проверяется отдельно. Установите 1.10.5 поверх предыдущей версии и смените зону после запуска захвата.
+
 # Release notes
 
 ## Windows 1.10.4 - 2026-10-25

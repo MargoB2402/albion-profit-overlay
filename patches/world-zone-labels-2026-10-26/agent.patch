@@ -1,0 +1,11 @@
+--- a/client/local_ws.go
++++ b/client/local_ws.go
+@@ -183,7 +183,7 @@
+ 	city := locationIDToCity(locationID)
+ 	getOverlayHub().broadcast(OverlayEvent{
+ 		Type:    "location",
+-		Payload: map[string]string{"city": city},
++		Payload: map[string]string{"city": city, "locationId": locationID},
+ 	})
+ }
+ 
