@@ -1,5 +1,20 @@
 # albion-profit-overlay
 
+[Windows 1.10.6 download](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.6)
+
+# Windows 1.10.6 — 26 October 2026
+
+The new loot tab uses the same session screen as Android 0.9.6: personal silver, collected item value, combined totals, observed fame and hourly rates. Exact-quality public sell quotes up to 24 hours old may fill missing item values; market estimates and unpriced items are clearly marked. Estimates are not sale proceeds.
+
+The capture agent observes fame awards for the local character, with reported premium/satchel/quick-learn components. It does not add cumulative fame or duplicated destiny-board credits. Captured fame is not classified as PvE only.
+
+Session aggregates are stored separately from the cloud upload queue, so acknowledged uploads do not erase the totals. Ending a session preserves its results and keeps the overlay open. Starting another session resets local session counters. Market privacy and entitlement checks remain active.
+
+The companion server handler can resolve exact indexed IDs for dungeon maps without localized names. Deploy that backend change separately; the Windows installer alone does not update the website API.
+
+Checks: Go client/Photon suites; valuation, persistence, account isolation and queue/session regressions; protected production desktop UI in all seven languages, loot totals/fame/end-without-closing and narrow layout; existing market bursts, private delivery, tabs, minimized view and ordinary zone transitions. No live-game/physical device test was available. Matching complete open-agent source is included; the proprietary desktop implementation is not published.
+
+
 ## Windows 1.10.5 - 2026-10-26
 
 [Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.5)

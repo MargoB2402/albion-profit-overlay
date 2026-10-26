@@ -1,0 +1,131 @@
+--- a/client/loot_capture.go
++++ b/client/loot_capture.go
+@@ -141,6 +141,7 @@
+ 	f.status()
+ }
+ func (f *lootCapture) event(code uint16, p map[byte]interface{}, now int64) {
++	if EventType(code) == evUpdateFame { f.fame(p,now); return }
+ 	if EventType(code) == evNewEquipmentItem || EventType(code) == evNewSimpleItem {
+ 		f.cacheLootItem(code, p, now)
+ 		return
+@@ -223,6 +224,7 @@
+ 	}
+ }
+ func (f *lootCapture) emit(record map[string]interface{}) {
++	record["own"] = record["player"] == f.player
+ 	f.emitted++
+ 	if f.sink != nil {
+ 		f.sink(record)
+--- /dev/null
++++ b/client/loot_fame.go
+@@ -0,0 +1,64 @@
++package client
++
++import (
++	"crypto/sha256"
++	"fmt"
++	"math"
++)
++
++// UpdateFame (82). All award amounts except factor 17 use silver-style 1e4 units.
++func fameAward(p map[byte]interface{}, self int64) (float64, bool) {
++	if self == 0 || farmInt(p[0]) != self {
++		return 0, false
++	}
++	component := func(k byte, required bool) float64 {
++		v, exists := p[k]
++		if !exists && !required {
++			return 0
++		}
++		n, ok := farmNumber(v)
++		if !ok || n < 0 || n > 9007199254740991 || math.IsNaN(n) || math.IsInf(n, 0) {
++			return math.NaN()
++		}
++		return n / 10000
++	}
++	premium := 1.0
++	if v, exists := p[5]; exists {
++		b, ok := v.(bool)
++		if !ok {
++			return 0, false
++		}
++		if b {
++			premium = 1.5
++		}
++	}
++	factor := 0.0
++	if v, exists := p[17]; exists {
++		var ok bool
++		factor, ok = farmNumber(v)
++		if !ok || factor < -1 || math.IsNaN(factor) || math.IsInf(factor, 0) {
++			return 0, false
++		}
++	}
++	// p13 is a duplicated board credit; p1 is cumulative, neither is an award.
++	n := (component(2, true)*premium+component(10, false))*(1+factor) + component(12, false)
++	return n, n > 0 && n <= 1e12 && !math.IsNaN(n) && !math.IsInf(n, 0)
++}
++func (f *lootCapture) fame(p map[byte]interface{}, now int64) {
++	n, ok := fameAward(p, f.self)
++	if !ok {
++		return
++	}
++	if _, ok := p[1]; ok {
++		key := sha256.Sum256([]byte(fmt.Sprintf("fame|%s|%d|%v|%v|%v|%v|%v|%v", f.player, f.self, p[1], p[2], p[5], p[10], p[12], p[17])))
++		if !firstSilverObservation(key, now) {
++			return
++		}
++	}
++	r := map[string]interface{}{"id": farmUUID(), "kind": "fame", "at": now, "player": f.player, "fame": n}
++	if f.sink != nil {
++		f.sink(r)
++	} else {
++		getOverlayHub().broadcast(OverlayEvent{Type: "loot_fame", Payload: r})
++	}
++}
+--- /dev/null
++++ b/client/loot_fame_test.go
+@@ -0,0 +1,43 @@
++package client
++
++import (
++	"math"
++	"testing"
++)
++
++func TestFameAwards(t *testing.T) {
++	p := map[byte]interface{}{0: int64(-42), 1: int64(999999999999), 2: int64(900000), 5: true, 12: int64(5400000), 13: int64(10800000)}
++	if n, ok := fameAward(p, -42); !ok || n != 675 {
++		t.Fatalf("quick learn must count once: %v %v", n, ok)
++	}
++	if _, ok := fameAward(p, 42); ok {
++		t.Fatal("foreign actor")
++	}
++	p[10] = int64(100000)
++	p[17] = 1.0
++	if n, ok := fameAward(p, -42); !ok || n != 830 {
++		t.Fatalf("bonus: %v %v", n, ok)
++	}
++	p[17] = -2.0
++	if _, ok := fameAward(p, -42); ok {
++		t.Fatal("invalid factor")
++	}
++	delete(p, 17)
++	p[10] = math.NaN()
++	if _, ok := fameAward(p, -42); ok {
++		t.Fatal("invalid award")
++	}
++}
++func TestFameDedup(t *testing.T) {
++	f := newLootCapture()
++	f.self = -99
++	f.player = "fame fixture"
++	var rows []map[string]interface{}
++	f.sink = func(r map[string]interface{}) { rows = append(rows, r) }
++	p := map[byte]interface{}{0: int64(-99), 1: int64(123456), 2: int64(100000)}
++	f.event(82, p, 1000)
++	f.event(82, p, 1001)
++	if len(rows) != 1 {
++		t.Fatalf("duplicate fame: %d", len(rows))
++	}
++}
