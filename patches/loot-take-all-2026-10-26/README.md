@@ -1,0 +1,1 @@
+Agent-only changes from 1.10.6: retain pending take-all objects until membership is known, and confirm individual arrivals separately from the batch RPC. Both regressions fail on 1.10.6 and pass on 1.10.7. Complete matching sources are included in the release.

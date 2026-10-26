@@ -1,0 +1,103 @@
+--- a/client/loot_containers.go
++++ b/client/loot_containers.go
+@@ -98,7 +98,7 @@
+ 			if move.destination == destination {
+ 				for _, object := range move.objects {
+ 					if object == id {
+-						move.confirmed = true
++						move.arrived[id] = true
+ 					}
+ 				}
+ 			}
+--- a/client/loot_moves.go
++++ b/client/loot_moves.go
+@@ -12,6 +12,7 @@
+ 	at                  int64
+ 	confirmed           bool
+ 	removed             map[int64]bool
++	arrived             map[int64]bool
+ 	amounts             map[int64]int64
+ }
+ 
+@@ -21,7 +22,7 @@
+ 	if f.player == "" || f.location == "" {
+ 		return
+ 	}
+-	m := &lootMove{code: code, at: now, slot: -1, removed: map[int64]bool{}, amounts: map[int64]int64{}}
++	m := &lootMove{code: code, at: now, slot: -1, removed: map[int64]bool{}, arrived: map[int64]bool{}, amounts: map[int64]int64{}}
+ 	switch OperationType(code) {
+ 	case opInventoryMoveItem:
+ 		m.source = farmGuid(p[1])
+@@ -129,6 +130,9 @@
+ 				}
+ 			}
+ 			if !linked || id <= 0 {
++				if id > 0 {
++					done = false
++				}
+ 				continue
+ 			}
+ 			meta, known := f.items[id]
+@@ -144,7 +148,7 @@
+ 				done = false
+ 				continue
+ 			}
+-			if !m.confirmed {
++			if !m.confirmed && !m.arrived[id] {
+ 				if m.destination != f.inventory || !m.removed[id] || !f.claimLootGain(meta.kind, meta.quality, amount, m.at, now) {
+ 					done = false
+ 					continue
+--- /dev/null
++++ b/client/loot_take_all_late_test.go
+@@ -0,0 +1,51 @@
++package client
++
++import "testing"
++
++func TestTakeAllLateMembership(t *testing.T) {
++	f := newLootCapture()
++	f.player = "Alice"
++	f.location = "dungeon"
++	f.inventory = "inventory"
++	f.sources[900] = lootSource{kind: "chest"}
++	f.containers["chest"] = lootContainer{source: 900, items: []int64{201}}
++	f.itemSources[201] = 900
++	var out []map[string]interface{}
++	f.sink = func(r map[string]interface{}) { out = append(out, r) }
++	for _, id := range []int64{201, 202} {
++		f.items[id] = lootItem{kind: 500 + id, quantity: 2, quality: 1, at: 1000}
++	}
++	f.moves["batch"] = &lootMove{code: uint16(opInventoryMoveGivenItems), source: "chest", destination: "inventory", objects: []int64{201, 202}, amounts: map[int64]int64{201: 2, 202: 2}, removed: map[int64]bool{}, arrived: map[int64]bool{}, at: 1000, confirmed: true}
++	f.replayMoves(1001)
++	if len(out) != 1 {
++		t.Fatal(out)
++	}
++	f.itemSources[202] = 900
++	f.replayMoves(1002)
++	if len(out) != 2 {
++		t.Fatal("late membership lost part of take all", out)
++	}
++	f.replayMoves(1003)
++	if len(out) != 2 {
++		t.Fatal("duplicate")
++	}
++}
++func TestTakeAllPartialArrival(t *testing.T) {
++	f := newLootCapture()
++	f.player = "Alice"
++	f.location = "dungeon"
++	f.inventory = "11111111-1111-4111-8111-111111111111"
++	f.sources[900] = lootSource{kind: "chest"}
++	f.containers["chest"] = lootContainer{source: 900, items: []int64{201, 202}}
++	var out []map[string]interface{}
++	f.sink = func(r map[string]interface{}) { out = append(out, r) }
++	for _, id := range []int64{201, 202} {
++		f.items[id] = lootItem{kind: 500 + id, quantity: 2, quality: 1, at: 1000}
++		f.itemSources[id] = 900
++	}
++	f.moves["batch"] = &lootMove{code: uint16(opInventoryMoveGivenItems), source: "chest", destination: f.inventory, objects: []int64{201, 202}, amounts: map[int64]int64{}, removed: map[int64]bool{}, arrived: map[int64]bool{}, at: 1000}
++	f.event(uint16(evInventoryPutItem), map[byte]interface{}{0: int64(201), 2: f.inventory}, 1001)
++	if len(out) != 1 {
++		t.Fatal("one arrival must not confirm all objects", out)
++	}
++}

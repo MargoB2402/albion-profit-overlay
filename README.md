@@ -1,5 +1,20 @@
 # albion-profit-overlay
 
+[Windows 1.10.7 download](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.7)
+
+# Windows 1.10.7 — 26 October 2026
+
+Take-all loot recording now retains unresolved objects when chest membership arrives late. One inventory arrival confirms only that object, rather than the entire batch. Both regression scenarios fail against the previous release source and pass with these fixes. Existing stack-merge and duplicate protection remains active.
+
+Loot sessions display start, finish, duration and pickup zones with their timezone. New session metadata is stored separately from the pickup queue and syncs to the subscriber cloud history for 30 days after the companion API update. Ending a session keeps the window open. Legacy records without explicit finish times remain without invented session boundaries. Existing zone filters in the cloud journal can be used to compare pickup results by location.
+
+The shared enchantment interface uses direct buttons for initial and target enchantment levels. Android-specific local fresh-price precedence does not change desktop market-price selection, which already displays verified personal quotes.
+
+Until the new server API is deployed, ordinary loot uploads continue; session metadata remains queued with a separate status indication. No production deployment was performed by this release.
+
+Checks: Go client/Photon regression suites and prior-release negative tests; PostgreSQL-compatible schema/upsert/owner/expiry and old-server compatibility tests; protected desktop UI in seven languages, existing private market delivery/minimized-zone tests; cloud session time-range/duration/zone browser checks. Live game/device confirmation is still needed. Matching full open-agent source is included; proprietary desktop implementation is excluded.
+
+
 [Windows 1.10.6 download](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.6)
 
 # Windows 1.10.6 — 26 October 2026
