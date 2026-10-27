@@ -1,5 +1,11 @@
 # albion-profit-overlay
 
+## Windows 1.10.8 - crafting and focus tracker
+
+[Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.8)
+
+Completed crafting batches, observed focus/returns and real ledger links. Partial sales, exact fees and silver per focus are separate from market-price estimates. Cloud batches and accounting links require the companion API and ledger update.
+
 [Windows 1.10.7 download](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.7)
 
 # Windows 1.10.7 — 26 October 2026
