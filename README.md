@@ -1,5 +1,9 @@
 # albion-profit-overlay
 
+[Windows 1.10.10: learning, trade and farming observations](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.10)
+
+Matched server deployment is required for challenge evaluation. Planting currently has fixture-based validation; a live island check remains pending.
+
 [Windows 1.10.9: compact sliding icon navigation](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.9)
 
 ## Windows 1.10.8 - crafting and focus tracker
