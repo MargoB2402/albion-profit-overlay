@@ -1,5 +1,7 @@
 # albion-profit-overlay
 
+[Windows 1.10.9: compact sliding icon navigation](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.9)
+
 ## Windows 1.10.8 - crafting and focus tracker
 
 [Download and release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.8)
