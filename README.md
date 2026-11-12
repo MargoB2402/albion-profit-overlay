@@ -1,5 +1,12 @@
 # albion-profit-overlay
 
+## Windows 2.0.26 - Clear VPN status and diagnostics
+
+The overlay now shows whether APH VPN is actually in use and offers activated customers a switch action when they still use an old connection. Support diagnostics distinguish tunnel state from synchronization/API delays.
+
+[Download and full release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v2.0.26).
+
+
 ## 2.0.25 - One VPN activation action
 
 [Download 2.0.25](https://github.com/MargoB2402/albion-profit-overlay/releases/download/v2.0.25/Albion-Profit-Overlay-Setup-2.0.25.exe) | [Release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v2.0.25)
