@@ -1,5 +1,11 @@
 # albion-profit-overlay
 
+## 2.0.25 - One VPN activation action
+
+[Download 2.0.25](https://github.com/MargoB2402/albion-profit-overlay/releases/download/v2.0.25/Albion-Profit-Overlay-Setup-2.0.25.exe) | [Release notes](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v2.0.25)
+
+One APH VPN field for demo and subscription vouchers. Connect VPN activates an entered voucher and then connects. VPN vouchers are identified when pasted into the website overlay-key field.
+
 [Windows 1.10.10: learning, trade and farming observations](https://github.com/MargoB2402/albion-profit-overlay/releases/tag/v1.10.10)
 
 Matched server deployment is required for challenge evaluation. Planting currently has fixture-based validation; a live island check remains pending.
